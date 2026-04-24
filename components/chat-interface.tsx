@@ -46,13 +46,13 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(false)
   const [isListening, setIsListening] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null)
   const [voiceError, setVoiceError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const speechRecognitionRef = useRef<SpeechRecognitionInstance | null>(null)
   const lastSpokenMessageIdRef = useRef<string | null>(null)
 
-  // Convert initial messages to UIMessage format for context
   const initialUIMessages: UIMessage[] = useMemo(() => {
     return initialMessages.map((msg, idx) => ({
       id: msg.id || `initial-${idx}`,
@@ -86,17 +86,14 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
 
   const isLoading = status === 'streaming' || status === 'submitted'
 
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Focus input on mount
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
 
-  // Initialize speech recognition once on mount when available.
   useEffect(() => {
     if (typeof window === 'undefined') return
 
@@ -131,7 +128,95 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
     }
   }, [])
 
-  // Auto-speak the newest assistant message if voice output is enabled.
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel()
+      }
+    }
+  }, [])
+
+  function extractMessageText(message: UIMessage) {
+    return (
+      message.parts
+        ?.filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+        .map((p) => p.text)
+        .join('')
+        .trim() || ''
+    )
+  }
+
+  function getPreferredVoice() {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      return null
+    }
+
+    const availableVoices = window.speechSynthesis.getVoices()
+    if (availableVoices.length === 0) {
+      return null
+    }
+
+    const wanted = twinProfile.voice_preference === 'female'
+      ? ['female', 'zira', 'samantha']
+      : ['male', 'david', 'mark']
+
+    return (
+      availableVoices.find((voice) => {
+        const name = voice.name.toLowerCase()
+        return wanted.some((needle) => name.includes(needle))
+      }) || null
+    )
+  }
+
+  function stopSpeech() {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      return
+    }
+
+    window.speechSynthesis.cancel()
+    setIsSpeaking(false)
+    setSpeakingMessageId(null)
+  }
+
+  function speakMessageText(text: string, messageId: string) {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      setVoiceError('Voice output is not supported in this browser/device.')
+      return
+    }
+
+    const trimmedText = text.trim()
+    if (!trimmedText) {
+      return
+    }
+
+    const utterance = new SpeechSynthesisUtterance(trimmedText)
+    utterance.rate = 1
+    utterance.pitch = twinProfile.voice_preference === 'female' ? 1.1 : 0.9
+
+    const selectedVoice = getPreferredVoice()
+    if (selectedVoice) {
+      utterance.voice = selectedVoice
+    }
+
+    utterance.onstart = () => {
+      setVoiceError(null)
+      setIsSpeaking(true)
+      setSpeakingMessageId(messageId)
+    }
+    utterance.onend = () => {
+      setIsSpeaking(false)
+      setSpeakingMessageId((currentId) => (currentId === messageId ? null : currentId))
+    }
+    utterance.onerror = () => {
+      setIsSpeaking(false)
+      setSpeakingMessageId((currentId) => (currentId === messageId ? null : currentId))
+      setVoiceError('Voice output failed on this browser/device.')
+    }
+
+    window.speechSynthesis.cancel()
+    window.speechSynthesis.speak(utterance)
+  }
+
   useEffect(() => {
     if (!isVoiceEnabled || typeof window === 'undefined' || !('speechSynthesis' in window)) {
       return
@@ -142,53 +227,14 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
       return
     }
 
-    const text = latestAssistant.parts
-      ?.filter((p): p is { type: 'text'; text: string } => p.type === 'text')
-      .map((p) => p.text)
-      .join('')
-      .trim()
-
+    const text = extractMessageText(latestAssistant)
     if (!text) {
       return
     }
 
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.rate = 1
-    utterance.pitch = twinProfile.voice_preference === 'female' ? 1.1 : 0.9
-
-    const availableVoices = window.speechSynthesis.getVoices()
-    if (availableVoices.length > 0) {
-      const wanted = twinProfile.voice_preference === 'female'
-        ? ['female', 'zira', 'samantha']
-        : ['male', 'david', 'mark']
-      const selected = availableVoices.find((voice) => {
-        const name = voice.name.toLowerCase()
-        return wanted.some((needle) => name.includes(needle))
-      })
-      if (selected) {
-        utterance.voice = selected
-      }
-    }
-
-    utterance.onstart = () => setIsSpeaking(true)
-    utterance.onend = () => setIsSpeaking(false)
-    utterance.onerror = () => {
-      setIsSpeaking(false)
-      setVoiceError('Voice output failed on this browser/device.')
-    }
-
-    window.speechSynthesis.cancel()
-    window.speechSynthesis.speak(utterance)
+    speakMessageText(text, latestAssistant.id)
     lastSpokenMessageIdRef.current = latestAssistant.id
   }, [messages, isVoiceEnabled, twinProfile.voice_preference])
-
-  useEffect(() => {
-    return () => {
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel()
-      }
-    }
-  }, [])
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -201,11 +247,7 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
     if (isLoading) return
 
     const lastUser = [...messages].reverse().find((message) => message.role === 'user')
-    const text = lastUser?.parts
-      ?.filter((p): p is { type: 'text'; text: string } => p.type === 'text')
-      .map((p) => p.text)
-      .join('')
-      .trim()
+    const text = lastUser ? extractMessageText(lastUser) : ''
 
     if (text) {
       sendMessage({ text })
@@ -230,16 +272,28 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
     setIsListening(true)
   }
 
-  // Determine avatar expression based on status
-  const avatarExpression = isLoading 
-    ? 'thinking' 
-    : isSpeaking 
-    ? 'speaking' 
+  function handleMessageSpeechToggle(message: UIMessage) {
+    const messageText = extractMessageText(message)
+    if (!messageText) {
+      return
+    }
+
+    if (speakingMessageId === message.id) {
+      stopSpeech()
+      return
+    }
+
+    speakMessageText(messageText, message.id)
+  }
+
+  const avatarExpression = isLoading
+    ? 'thinking'
+    : isSpeaking
+    ? 'speaking'
     : 'happy'
 
   return (
     <div className="flex flex-col h-full bg-background">
-      {/* Chat Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card">
         <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 ring-1 ring-primary/15">
           <AvatarPreview expression={avatarExpression} size="sm" mode="profile" />
@@ -256,8 +310,8 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
           <button
             onClick={() => setIsVoiceEnabled(!isVoiceEnabled)}
             className={`p-2 rounded-lg transition-colors ${
-              isVoiceEnabled 
-                ? 'bg-primary/10 text-primary' 
+              isVoiceEnabled
+                ? 'bg-primary/10 text-primary'
                 : 'text-muted-foreground hover:bg-muted'
             }`}
             title={isVoiceEnabled ? 'Mute voice output' : 'Enable voice output'}
@@ -267,7 +321,6 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
         </div>
       </div>
 
-      {/* Messages Area */}
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
@@ -278,7 +331,7 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
               Hi, I&apos;m {twinProfile.name}!
             </h2>
             <p className="text-muted-foreground max-w-md">
-              I&apos;m your digital twin, here to help you reflect, make decisions, and grow. 
+              I&apos;m your digital twin, here to help you reflect, make decisions, and grow.
               What&apos;s on your mind today?
             </p>
             <div className="mt-6 flex flex-wrap gap-2 justify-center">
@@ -300,10 +353,12 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
 
         <AnimatePresence initial={false}>
           {messages.map((message) => (
-            <MessageBubble 
-              key={message.id} 
-              message={message} 
+            <MessageBubble
+              key={message.id}
+              message={message}
               twinName={twinProfile.name}
+              isSpeaking={speakingMessageId === message.id}
+              onToggleSpeech={handleMessageSpeechToggle}
             />
           ))}
         </AnimatePresence>
@@ -333,22 +388,21 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area */}
       <div className="border-t border-border bg-card p-4">
         <form onSubmit={handleSubmit} className="flex items-center gap-3">
           <button
             type="button"
             onClick={toggleListening}
             className={`p-3 rounded-xl transition-colors ${
-              isListening 
-                ? 'bg-primary text-primary-foreground' 
+              isListening
+                ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:text-foreground'
             }`}
             title={isListening ? 'Stop listening' : 'Start voice input'}
           >
             {isListening ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
           </button>
-          
+
           <input
             ref={inputRef}
             type="text"
@@ -358,7 +412,7 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
             disabled={isLoading}
             className="flex-1 px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
           />
-          
+
           <button
             type="submit"
             disabled={!input.trim() || isLoading}
@@ -376,19 +430,22 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
   )
 }
 
-function MessageBubble({ 
-  message, 
-  twinName 
-}: { 
+function MessageBubble({
+  message,
+  twinName,
+  isSpeaking,
+  onToggleSpeech,
+}: {
   message: UIMessage
-  twinName: string 
+  twinName: string
+  isSpeaking: boolean
+  onToggleSpeech: (message: UIMessage) => void
 }) {
   const isUser = message.role === 'user'
-  
-  // Extract text content from parts
+
   const textContent = message.parts
     ?.filter((p): p is { type: 'text'; text: string } => p.type === 'text')
-    .map(p => p.text)
+    .map((p) => p.text)
     .join('') || ''
 
   return (
@@ -413,7 +470,22 @@ function MessageBubble({
           }`}
         >
           {!isUser && (
-            <p className="text-xs text-primary font-medium mb-1">{twinName}</p>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-xs text-primary font-medium">{twinName}</p>
+              <button
+                type="button"
+                onClick={() => onToggleSpeech(message)}
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors ${
+                  isSpeaking
+                    ? 'bg-primary/15 text-primary'
+                    : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'
+                }`}
+                title={isSpeaking ? 'Stop reading aloud' : 'Read this message aloud'}
+              >
+                {isSpeaking ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                {isSpeaking ? 'Stop audio' : 'Read aloud'}
+              </button>
+            </div>
           )}
           <p className="text-sm whitespace-pre-wrap leading-relaxed">{textContent}</p>
         </div>
