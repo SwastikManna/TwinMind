@@ -240,12 +240,12 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Chat Header */}
-      <div className="flex items-center gap-4 px-4 py-3 border-b border-border bg-card">
-        <div className="w-12 h-12">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card">
+        <div className="flex-shrink-0 rounded-full bg-primary/10 p-1">
           <AvatarPreview expression={avatarExpression} size="sm" />
         </div>
-        <div className="flex-1">
-          <h1 className="font-semibold text-foreground" style={{ fontFamily: 'var(--font-display)' }}>
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate font-semibold text-foreground" style={{ fontFamily: 'var(--font-display)' }}>
             {twinProfile.name}
           </h1>
           <p className="text-sm text-muted-foreground">

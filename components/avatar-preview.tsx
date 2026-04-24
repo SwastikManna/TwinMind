@@ -16,8 +16,8 @@ export function AvatarPreview({
   size = 'lg',
 }: AvatarPreviewProps) {
   const sizeClasses = {
-    sm: 'w-24 h-24',
-    md: 'w-40 h-40',
+    sm: 'w-12 h-12',
+    md: 'w-24 h-24',
     lg: 'w-72 h-72',
   }
 
