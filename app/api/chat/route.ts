@@ -253,7 +253,7 @@ function buildTwinSystemPrompt(
   plannerIntelligenceContext = '',
 ): string {
   if (!profile) {
-    return `You are TwinMind, a helpful and empathetic AI digital twin. You aim to understand the user deeply and provide personalized guidance. Be warm, supportive, and thoughtful in your responses. Ask clarifying questions when needed and remember details about the user to build a meaningful relationship. Keep answers concise and practical by default.`
+    return `You are Saathi, a helpful and empathetic AI digital twin. You aim to understand the user deeply and provide personalized guidance. Be warm, supportive, and thoughtful in your responses. Ask clarifying questions when needed and remember details about the user to build a meaningful relationship. Keep answers concise and practical by default.`
   }
 
   const traits = profile.personality_traits.length > 0 

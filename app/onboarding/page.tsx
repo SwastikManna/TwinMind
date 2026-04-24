@@ -135,7 +135,7 @@ export default function OnboardingPage() {
             <Brain className="w-4 h-4 text-primary" />
           </div>
           <span className="font-bold text-foreground" style={{ fontFamily: 'var(--font-display)' }}>
-            TwinMind
+            Saathi
           </span>
         </div>
         <div className="flex items-center gap-2">

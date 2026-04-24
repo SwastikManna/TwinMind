@@ -24,7 +24,7 @@ export default async function LandingPage() {
             <Brain className="h-5 w-5 text-primary" />
           </div>
           <span className="text-2xl font-bold text-foreground" style={{ fontFamily: 'var(--font-display)' }}>
-            TwinMind
+            Saathi
           </span>
         </Link>
         <div className="flex items-center gap-2">
@@ -72,10 +72,10 @@ export default async function LandingPage() {
             className="text-[clamp(3rem,8vw,5.5rem)] font-bold leading-[1.02] text-foreground"
             style={{ fontFamily: 'var(--font-display)' }}
           >
-            TwinMind
+            Saathi
           </h1>
           <p className="mt-6 max-w-4xl text-[clamp(1.2rem,2.2vw,1.7rem)] leading-relaxed text-muted-foreground">
-            TwinMind is a personalized AI companion that learns your goals, mood patterns, and habits to help you
+            Saathi is a personalized AI companion that learns your goals, mood patterns, and habits to help you
             make better decisions, stay consistent, and grow every day.
           </p>
           <div className="mt-10 flex flex-wrap items-center gap-4">

@@ -59,7 +59,7 @@ export function DashboardNav({ user, profileName, profileImageUrl }: DashboardNa
               <Brain className="w-4 h-4 text-primary" />
             </div>
             <span className="font-bold text-foreground" style={{ fontFamily: 'var(--font-display)' }}>
-              TwinMind
+              Saathi
             </span>
           </Link>
           <div className="flex items-center gap-1">
@@ -111,7 +111,7 @@ export function DashboardNav({ user, profileName, profileImageUrl }: DashboardNa
               <Brain className="w-5 h-5 text-primary" />
             </div>
             <span className="font-bold text-xl text-foreground" style={{ fontFamily: 'var(--font-display)' }}>
-              TwinMind
+              Saathi
             </span>
           </Link>
           <ThemeToggle />

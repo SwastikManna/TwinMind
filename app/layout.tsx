@@ -8,8 +8,8 @@ const plusJakarta = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-in
 const sora = Sora({ subsets: ['latin'], variable: '--font-space' })
 
 export const metadata: Metadata = {
-  title: 'TwinMind - Your Digital Twin',
-  description: 'An AI-powered digital twin that learns your personality, habits, and goals to provide personalized guidance and decision support.',
+  title: 'Saathi - Your AI Saathi',
+  description: 'An AI-powered saathi that learns your personality, habits, and goals to provide personalized guidance and decision support.',
   generator: 'v0.app',
   icons: {
     icon: [
