@@ -81,7 +81,7 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
 
   const { messages, sendMessage, status, error } = useChat({
     transport,
-    initialMessages: initialUIMessages,
+    messages: initialUIMessages,
   })
 
   const isLoading = status === 'streaming' || status === 'submitted'
