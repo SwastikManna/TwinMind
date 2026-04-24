@@ -7,6 +7,7 @@ interface AvatarPreviewProps {
   headColor?: string
   bodyColor?: string
   size?: 'sm' | 'md' | 'lg'
+  mode?: 'full' | 'profile'
 }
 
 export function AvatarPreview({
@@ -14,6 +15,7 @@ export function AvatarPreview({
   headColor = '#0d9488',
   bodyColor = '#0f766e',
   size = 'lg',
+  mode = 'full',
 }: AvatarPreviewProps) {
   const sizeClasses = {
     sm: 'w-12 h-12',
@@ -35,10 +37,16 @@ export function AvatarPreview({
     speaking: { d: 'M 35 52 Q 50 62 65 52' },
   }
 
+  const isProfile = mode === 'profile'
+
   return (
-    <div className={`${sizeClasses[size]} relative flex items-center justify-center`}>
+    <div
+      className={`${sizeClasses[size]} relative flex items-center justify-center ${
+        isProfile ? 'overflow-hidden rounded-full' : ''
+      }`}
+    >
       <motion.svg
-        viewBox="0 0 100 100"
+        viewBox={isProfile ? '15 12 70 70' : '0 0 100 100'}
         className="w-full h-full"
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -60,16 +68,18 @@ export function AvatarPreview({
         </defs>
 
         {/* Body/Neck */}
-        <motion.ellipse
-          cx="50"
-          cy="90"
-          rx="25"
-          ry="15"
-          fill={bodyColor}
-          initial={{ y: 10 }}
-          animate={{ y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-        />
+        {!isProfile && (
+          <motion.ellipse
+            cx="50"
+            cy="90"
+            rx="25"
+            ry="15"
+            fill={bodyColor}
+            initial={{ y: 10 }}
+            animate={{ y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+          />
+        )}
 
         {/* Head */}
         <motion.circle
@@ -150,7 +160,7 @@ export function AvatarPreview({
         )}
 
         {/* Thinking dots */}
-        {expression === 'thinking' && (
+        {expression === 'thinking' && !isProfile && (
           <>
             <motion.circle
               cx="75"

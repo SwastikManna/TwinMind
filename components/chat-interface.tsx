@@ -81,7 +81,7 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
 
   const { messages, sendMessage, status, error } = useChat({
     transport,
-    messages: initialUIMessages,
+    initialMessages: initialUIMessages,
   })
 
   const isLoading = status === 'streaming' || status === 'submitted'
@@ -241,8 +241,8 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
     <div className="flex flex-col h-full bg-background">
       {/* Chat Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card">
-        <div className="flex-shrink-0 rounded-full bg-primary/10 p-1">
-          <AvatarPreview expression={avatarExpression} size="sm" />
+        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 ring-1 ring-primary/15">
+          <AvatarPreview expression={avatarExpression} size="sm" mode="profile" />
         </div>
         <div className="min-w-0 flex-1">
           <h1 className="truncate font-semibold text-foreground" style={{ fontFamily: 'var(--font-display)' }}>
