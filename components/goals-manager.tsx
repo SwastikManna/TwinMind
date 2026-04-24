@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Target, Plus, Check, X, Sparkles, Calendar, TrendingUp, RefreshCw } from 'lucide-react'
+import { DashboardPageHeader, DashboardSection } from '@/components/dashboard-shell'
 import type { TwinProfile, MemoryLog } from '@/lib/types'
 
 interface GoalsManagerProps {
@@ -164,42 +165,37 @@ export function GoalsManager({ twinProfile, memoryLogs }: GoalsManagerProps) {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-foreground" style={{ fontFamily: 'var(--font-display)' }}>
-            Your Goals
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Track your progress and stay accountable
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleGenerateGoalCoachPlan}
-            disabled={isGeneratingCoachPlan || isPending || twinProfile.goals.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
-          >
-            {isGeneratingCoachPlan ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Target className="w-5 h-5" />}
-            Goal Coach
-          </button>
-          <button
-            onClick={handleGenerateGoalCheckin}
-            disabled={isGeneratingCheckin || isPending || twinProfile.goals.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-accent text-accent-foreground rounded-xl font-medium hover:bg-accent/90 disabled:opacity-50 transition-colors"
-          >
-            {isGeneratingCheckin ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
-            AI Check-in
-          </button>
-          <button
-            onClick={() => setShowAddGoal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 transition-colors"
-          >
-            <Plus className="w-5 h-5" />
-            Add Goal
-          </button>
-        </div>
-      </div>
+      <DashboardPageHeader
+        title="Your Goals"
+        description="Track your progress and stay accountable"
+        actions={
+          <>
+            <button
+              onClick={handleGenerateGoalCoachPlan}
+              disabled={isGeneratingCoachPlan || isPending || twinProfile.goals.length === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            >
+              {isGeneratingCoachPlan ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Target className="w-5 h-5" />}
+              Goal Coach
+            </button>
+            <button
+              onClick={handleGenerateGoalCheckin}
+              disabled={isGeneratingCheckin || isPending || twinProfile.goals.length === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-accent text-accent-foreground rounded-xl font-medium hover:bg-accent/90 disabled:opacity-50 transition-colors"
+            >
+              {isGeneratingCheckin ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+              AI Check-in
+            </button>
+            <button
+              onClick={() => setShowAddGoal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 transition-colors"
+            >
+              <Plus className="w-5 h-5" />
+              Add Goal
+            </button>
+          </>
+        }
+      />
 
       {goalError && (
         <div className="rounded-xl bg-destructive/10 text-destructive text-sm px-4 py-3">
@@ -208,11 +204,7 @@ export function GoalsManager({ twinProfile, memoryLogs }: GoalsManagerProps) {
       )}
 
       {goalCheckin && (
-        <div className="bg-card rounded-2xl border border-border p-6">
-          <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-accent" />
-            Weekly Goal Check-in
-          </h3>
+        <DashboardSection title="Weekly Goal Check-in" icon={Sparkles} collapsible defaultOpen={false}>
           <p className="text-foreground mb-3">{goalCheckin.summary}</p>
           {goalCheckin.suggested_actions.length > 0 && (
             <ul className="space-y-2">
@@ -224,15 +216,11 @@ export function GoalsManager({ twinProfile, memoryLogs }: GoalsManagerProps) {
               ))}
             </ul>
           )}
-        </div>
+        </DashboardSection>
       )}
 
       {goalCoachPlan && (
-        <div className="bg-card rounded-2xl border border-border p-6">
-          <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-            <Target className="w-5 h-5 text-primary" />
-            Goal Coach Plan
-          </h3>
+        <DashboardSection title="Goal Coach Plan" icon={Target} collapsible defaultOpen={false}>
           <p className="text-sm text-muted-foreground mb-1">Focus this week</p>
           <p className="text-foreground mb-4">{goalCoachPlan.focus_goal}</p>
           <div className="space-y-2 mb-4">
@@ -245,7 +233,7 @@ export function GoalsManager({ twinProfile, memoryLogs }: GoalsManagerProps) {
           </div>
           <p className="text-sm text-muted-foreground">Risk: <span className="text-foreground">{goalCoachPlan.risk}</span></p>
           <p className="text-sm text-muted-foreground mt-1">Win condition: <span className="text-foreground">{goalCoachPlan.win_condition}</span></p>
-        </div>
+        </DashboardSection>
       )}
 
       {/* Add Goal Modal */}
@@ -353,12 +341,7 @@ export function GoalsManager({ twinProfile, memoryLogs }: GoalsManagerProps) {
 
       {/* Progress Section */}
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Daily Habits */}
-        <div className="bg-card rounded-2xl border border-border p-6">
-          <h2 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-primary" />
-            Daily Habits
-          </h2>
+        <DashboardSection title="Daily Habits" icon={Calendar} className="h-full">
           {twinProfile.daily_habits.length > 0 ? (
             <div className="space-y-3">
               {twinProfile.daily_habits.map((habit, index) => (
@@ -373,14 +356,9 @@ export function GoalsManager({ twinProfile, memoryLogs }: GoalsManagerProps) {
               No daily habits set. Add some in your profile settings.
             </p>
           )}
-        </div>
+        </DashboardSection>
 
-        {/* Recent Activity */}
-        <div className="bg-card rounded-2xl border border-border p-6">
-          <h2 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-primary" />
-            Recent Progress
-          </h2>
+        <DashboardSection title="Recent Progress" icon={TrendingUp} className="h-full">
           {memoryLogs.length > 0 ? (
             <div className="space-y-3">
               {memoryLogs.slice(0, 5).map((log) => (
@@ -400,7 +378,7 @@ export function GoalsManager({ twinProfile, memoryLogs }: GoalsManagerProps) {
               Start chatting with your twin to track your progress.
             </p>
           )}
-        </div>
+        </DashboardSection>
       </div>
     </div>
   )

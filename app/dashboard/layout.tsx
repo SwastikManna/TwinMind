@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { DashboardNav } from '@/components/dashboard-nav'
 import { GlobalNotifications } from '@/components/global-notifications'
+import { TutorialWalkthrough } from '@/components/tutorial-walkthrough'
 import { getFallbackCalendarEvents, isMissingTableError, normalizeCalendarEvent } from '@/lib/calendar'
 import type { CalendarEvent, Profile, TwinProfile } from '@/lib/types'
 
@@ -61,12 +62,14 @@ export default async function DashboardLayout({
       ? (profile.avatar_config as Record<string, unknown>)
       : {}
   const profileImageUrl = typeof avatarConfig.profile_image_url === 'string' ? avatarConfig.profile_image_url : null
+  const hasSeenTutorial = avatarConfig.has_seen_tutorial === true
   const profileName = profile?.name || user.user_metadata?.name || 'User'
 
   return (
     <div className="min-h-screen bg-background">
       <DashboardNav user={user} profileName={profileName} profileImageUrl={profileImageUrl} />
       <GlobalNotifications events={events} enabled={globalNotificationsEnabled} />
+      <TutorialWalkthrough userId={user.id} shouldAutoShow={!hasSeenTutorial} avatarConfig={avatarConfig} />
       <main className="lg:pl-64">
         <div className="px-4 sm:px-6 lg:px-8 py-8">
           {children}

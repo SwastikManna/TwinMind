@@ -1,11 +1,12 @@
-'use client'
+﻿'use client'
 
 import { useMemo, useState } from 'react'
 import { addHours, format, isSameDay, parseISO, startOfDay } from 'date-fns'
-import { AlertTriangle, BellRing, Calendar as CalendarIcon, Clock3, Plus, Save, ShieldAlert, Trash2, X } from 'lucide-react'
+import { AlertTriangle, BellRing, Calendar as CalendarIcon, Clock3, Flame, Plus, Save, ShieldAlert, Trash2, X } from 'lucide-react'
 import { Calendar } from '@/components/ui/calendar'
 import { getCalendarConflicts, getDueReminders, getPriorityRiskItems } from '@/lib/calendar'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { DashboardPageHeader, DashboardSection } from '@/components/dashboard-shell'
 import type { CalendarEvent, CalendarEventPriority, CalendarEventRecurrence, CalendarEventTag } from '@/lib/types'
 
 interface CalendarPlannerProps {
@@ -263,26 +264,22 @@ export function CalendarPlanner({ initialEvents, moodDayKeys }: CalendarPlannerP
 
   return (
     <div className="space-y-6 pt-16 lg:pt-0">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-foreground" style={{ fontFamily: 'var(--font-display)' }}>
-            Calendar & Events
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Plan your days with tags, priorities, reminders, and recurrence.
-          </p>
-        </div>
-        <button
-          onClick={openCreateEditor}
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90"
-        >
-          <Plus className="h-4 w-4" />
-          Add Event
-        </button>
-      </div>
+      <DashboardPageHeader
+        title="Calendar & Events"
+        description="Plan your days with tags, priorities, reminders, and recurrence."
+        actions={
+          <button
+            onClick={openCreateEditor}
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90"
+          >
+            <Plus className="h-4 w-4" />
+            Add Event
+          </button>
+        }
+      />
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_1fr]">
-        <section className="rounded-2xl border border-border bg-card p-4">
+        <section className="rounded-2xl border border-border bg-card p-4 tm-panel">
           <Calendar
             mode="single"
             selected={selectedDate}
@@ -312,13 +309,13 @@ export function CalendarPlanner({ initialEvents, moodDayKeys }: CalendarPlannerP
                     {marker !== 'none' && (
                       <span className="absolute left-0.5 top-0.5 text-[10px] leading-none">
                         {marker === 'active_streak' ? (
-                          <span title="Active streak">🔥</span>
+                          <Flame className="h-3 w-3 fill-orange-400 text-orange-500" title="Active streak" />
                         ) : marker === 'ended_streak' ? (
-                          <span title="Past streak" className="text-sky-500">
-                            🔥
-                          </span>
+                          <Flame className="h-3 w-3 fill-sky-400 text-sky-500" title="Past streak" />
                         ) : (
-                          <span title="Streak ended">❌</span>
+                          <span title="Streak ended" className="text-red-500">
+                            ×
+                          </span>
                         )}
                       </span>
                     )}
@@ -330,11 +327,11 @@ export function CalendarPlanner({ initialEvents, moodDayKeys }: CalendarPlannerP
         </section>
 
         <section className="space-y-4">
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <h2 className="flex items-center gap-2 font-semibold text-foreground">
-              <CalendarIcon className="h-4 w-4 text-primary" />
-              {format(selectedDate, 'EEEE, MMM d')}
-            </h2>
+          <DashboardSection
+            title={format(selectedDate, 'EEEE, MMM d')}
+            icon={CalendarIcon}
+            contentClassName="max-h-64 overflow-y-auto pr-1"
+          >
             <div className="mt-3 space-y-2 max-h-64 overflow-y-auto pr-1">
               {selectedEvents.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No events for this day yet.</p>
@@ -357,13 +354,9 @@ export function CalendarPlanner({ initialEvents, moodDayKeys }: CalendarPlannerP
                 ))
               )}
             </div>
-          </div>
+          </DashboardSection>
 
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <h2 className="flex items-center gap-2 font-semibold text-foreground">
-              <Clock3 className="h-4 w-4 text-primary" />
-              Upcoming
-            </h2>
+          <DashboardSection title="Upcoming" icon={Clock3} collapsible defaultOpen={false}>
             <ul className="mt-3 space-y-2">
               {upcomingEvents.length === 0 ? (
                 <li className="text-sm text-muted-foreground">No upcoming events yet.</li>
@@ -376,16 +369,12 @@ export function CalendarPlanner({ initialEvents, moodDayKeys }: CalendarPlannerP
                 ))
               )}
             </ul>
-          </div>
+          </DashboardSection>
         </section>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <section className="rounded-2xl border border-border bg-card p-4">
-          <h2 className="flex items-center gap-2 font-semibold text-foreground">
-            <AlertTriangle className="h-4 w-4 text-chart-3" />
-            Conflict Planner
-          </h2>
+        <DashboardSection title="Conflict Planner" icon={AlertTriangle} collapsible defaultOpen={false}>
           <div className="mt-3 space-y-2">
             {conflicts.length === 0 ? (
               <p className="text-sm text-muted-foreground">No overlaps detected. Your schedule looks clean.</p>
@@ -402,13 +391,9 @@ export function CalendarPlanner({ initialEvents, moodDayKeys }: CalendarPlannerP
               ))
             )}
           </div>
-        </section>
+        </DashboardSection>
 
-        <section className="rounded-2xl border border-border bg-card p-4">
-          <h2 className="flex items-center gap-2 font-semibold text-foreground">
-            <BellRing className="h-4 w-4 text-primary" />
-            Reminder Queue
-          </h2>
+        <DashboardSection title="Reminder Queue" icon={BellRing} collapsible defaultOpen={false}>
           <div className="mt-3 space-y-2">
             {dueReminders.length === 0 ? (
               <p className="text-sm text-muted-foreground">No reminder due in the next 4 hours.</p>
@@ -433,14 +418,10 @@ export function CalendarPlanner({ initialEvents, moodDayKeys }: CalendarPlannerP
               ))
             )}
           </div>
-        </section>
+        </DashboardSection>
       </div>
 
-      <section className="rounded-2xl border border-border bg-card p-4">
-        <h2 className="flex items-center gap-2 font-semibold text-foreground">
-          <ShieldAlert className="h-4 w-4 text-primary" />
-          Critical Event Focus Guard
-        </h2>
+      <DashboardSection title="Critical Event Focus Guard" icon={ShieldAlert} collapsible defaultOpen={false}>
         <div className="mt-3 space-y-2">
           {priorityRisks.length === 0 ? (
             <p className="text-sm text-muted-foreground">
@@ -468,7 +449,7 @@ export function CalendarPlanner({ initialEvents, moodDayKeys }: CalendarPlannerP
             ))
           )}
         </div>
-      </section>
+      </DashboardSection>
 
       {isEditorOpen && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/55 p-4">
@@ -735,3 +716,4 @@ function buildStreakMarkers(moodDayKeys: string[]) {
 
   return markers
 }
+

@@ -65,7 +65,7 @@ export default async function InsightsPage() {
       : insights || []
 
   return (
-    <div className="max-w-4xl mx-auto pt-16 lg:pt-0 tm-page-shell">
+    <div className="max-w-5xl mx-auto pt-20 lg:pt-6 tm-page-shell">
       <InsightsView 
         twinProfile={twinProfile}
         insights={safeInsights}

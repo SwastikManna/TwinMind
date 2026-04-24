@@ -14,6 +14,7 @@ import {
   RefreshCw,
   Activity
 } from 'lucide-react'
+import { DashboardPageHeader, DashboardSection } from '@/components/dashboard-shell'
 import type { TwinProfile, Insight, MemoryLog } from '@/lib/types'
 
 interface InsightsViewProps {
@@ -88,43 +89,38 @@ export function InsightsView({ twinProfile, insights, memoryLogs }: InsightsView
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-foreground" style={{ fontFamily: 'var(--font-display)' }}>
-            Insights
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Personalized patterns and recommendations from your twin
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={generateWeeklyReport}
-            disabled={isGeneratingReport || isPending}
-            className="flex items-center gap-2 px-4 py-2 bg-accent text-accent-foreground rounded-xl font-medium hover:bg-accent/90 disabled:opacity-50 transition-colors"
-          >
-            {isGeneratingReport ? (
-              <RefreshCw className="w-5 h-5 animate-spin" />
-            ) : (
-              <Calendar className="w-5 h-5" />
-            )}
-            Weekly Report
-          </button>
-          <button
-            onClick={generateInsight}
-            disabled={isGenerating || isPending}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
-          >
-            {isGenerating ? (
-              <RefreshCw className="w-5 h-5 animate-spin" />
-            ) : (
-              <Sparkles className="w-5 h-5" />
-            )}
-            Generate Insight
-          </button>
-        </div>
-      </div>
+      <DashboardPageHeader
+        title="Insights"
+        description="Personalized patterns and recommendations from your twin"
+        actions={
+          <>
+            <button
+              onClick={generateWeeklyReport}
+              disabled={isGeneratingReport || isPending}
+              className="flex items-center gap-2 px-4 py-2 bg-accent text-accent-foreground rounded-xl font-medium hover:bg-accent/90 disabled:opacity-50 transition-colors"
+            >
+              {isGeneratingReport ? (
+                <RefreshCw className="w-5 h-5 animate-spin" />
+              ) : (
+                <Calendar className="w-5 h-5" />
+              )}
+              Weekly Report
+            </button>
+            <button
+              onClick={generateInsight}
+              disabled={isGenerating || isPending}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            >
+              {isGenerating ? (
+                <RefreshCw className="w-5 h-5 animate-spin" />
+              ) : (
+                <Sparkles className="w-5 h-5" />
+              )}
+              Generate Insight
+            </button>
+          </>
+        }
+      />
 
       {/* Stats Overview */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -220,11 +216,7 @@ export function InsightsView({ twinProfile, insights, memoryLogs }: InsightsView
       </div>
 
       {weeklyReport && (
-        <div className="bg-card rounded-2xl border border-border p-6">
-          <h2 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-accent" />
-            Weekly Mood Report
-          </h2>
+        <DashboardSection title="Weekly Mood Report" icon={Calendar} collapsible defaultOpen={false}>
           <div className="grid md:grid-cols-2 gap-4 mb-4">
             <div className="rounded-xl border border-border p-4">
               <p className="text-sm text-muted-foreground">Avg Happiness</p>
@@ -243,7 +235,7 @@ export function InsightsView({ twinProfile, insights, memoryLogs }: InsightsView
             </div>
           )}
           <p className="text-sm text-foreground">{weeklyReport.recommendation}</p>
-        </div>
+        </DashboardSection>
       )}
 
     </div>

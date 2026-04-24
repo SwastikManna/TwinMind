@@ -14,7 +14,10 @@ export interface AvatarConfig {
   expression?: 'neutral' | 'happy' | 'thinking' | 'speaking'
   profile_image_url?: string
   phone_number?: string
+  has_seen_tutorial?: boolean
 }
+
+export type AvatarHeadShape = 'circle' | 'square' | 'rectangle' | 'cylinder' | 'triangle' | 'pentagon' | 'star'
 
 export interface TwinProfile {
   id: string
@@ -43,9 +46,11 @@ export interface AIPersonalityModel {
   preferences?: {
     global_notifications_enabled?: boolean
   }
+  voice_tone?: 'warm' | 'calm' | 'energetic' | 'soft' | 'deep'
   avatar_appearance?: {
     head_color?: string
     body_color?: string
+    head_shape?: AvatarHeadShape
   }
   calendar_events?: CalendarEvent[]
   mood_tracker_entries?: Array<{

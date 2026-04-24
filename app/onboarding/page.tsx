@@ -134,7 +134,7 @@ export default function OnboardingPage() {
           <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
             <Brain className="w-4 h-4 text-primary" />
           </div>
-          <span className="font-bold text-foreground" style={{ fontFamily: 'var(--font-display)' }}>
+          <span className="brand-wordmark text-foreground text-2xl">
             Saathi
           </span>
         </div>

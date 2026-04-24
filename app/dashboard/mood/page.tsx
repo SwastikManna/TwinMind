@@ -16,7 +16,7 @@ export default async function MoodPage() {
   const entries = await fetchMoodEntries(supabase, user.id)
 
   return (
-    <div className="max-w-5xl mx-auto pt-16 lg:pt-0 tm-page-shell">
+    <div className="max-w-6xl mx-auto pt-20 lg:pt-6 tm-page-shell">
       <MoodTracker entries={entries} />
     </div>
   )

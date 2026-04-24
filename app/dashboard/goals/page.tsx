@@ -37,7 +37,7 @@ export default async function GoalsPage() {
       : memoryLogs || []
 
   return (
-    <div className="max-w-4xl mx-auto pt-16 lg:pt-0 tm-page-shell">
+    <div className="max-w-5xl mx-auto pt-20 lg:pt-6 tm-page-shell">
       <GoalsManager 
         twinProfile={twinProfile} 
         memoryLogs={safeMemoryLogs}

@@ -29,11 +29,11 @@ interface DashboardNavProps {
 
 const navItems = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
-  { href: '/dashboard/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/dashboard/chat', label: 'Chat with Twin', icon: MessageSquare },
-  { href: '/dashboard/mood', label: 'Mood Tracker', icon: HeartPulse },
   { href: '/dashboard/goals', label: 'Goals', icon: Target },
   { href: '/dashboard/insights', label: 'Insights', icon: Lightbulb },
+  { href: '/dashboard/mood', label: 'Mood Tracker', icon: HeartPulse },
+  { href: '/dashboard/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ]
 
@@ -58,7 +58,7 @@ export function DashboardNav({ user, profileName, profileImageUrl }: DashboardNa
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
               <Brain className="w-4 h-4 text-primary" />
             </div>
-            <span className="font-bold text-foreground" style={{ fontFamily: 'var(--font-display)' }}>
+            <span className="brand-wordmark text-foreground text-xl">
               Saathi
             </span>
           </Link>
@@ -110,7 +110,7 @@ export function DashboardNav({ user, profileName, profileImageUrl }: DashboardNa
             <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
               <Brain className="w-5 h-5 text-primary" />
             </div>
-            <span className="font-bold text-xl text-foreground" style={{ fontFamily: 'var(--font-display)' }}>
+            <span className="brand-wordmark text-foreground text-2xl">
               Saathi
             </span>
           </Link>

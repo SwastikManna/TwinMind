@@ -61,7 +61,7 @@ export default async function ChatPage() {
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] lg:h-[calc(100vh-2rem)] pt-16 lg:pt-0">
+    <div className="h-[calc(100vh-4rem)] lg:h-[calc(100vh-2rem)] pt-20 lg:pt-6">
       <ChatInterface 
         twinProfile={twinProfile}
         initialMessages={messages}

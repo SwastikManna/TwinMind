@@ -1,32 +1,21 @@
 import type { Metadata, Viewport } from 'next'
-import { Plus_Jakarta_Sans, Sora } from 'next/font/google'
+import { Plus_Jakarta_Sans, Playfair_Display, Sora } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { ThemeProvider } from '@/components/theme-provider'
 import './globals.css'
 
 const plusJakarta = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-inter' })
 const sora = Sora({ subsets: ['latin'], variable: '--font-space' })
+const playfair = Playfair_Display({ subsets: ['latin'], variable: '--font-brand', weight: ['700'] })
 
 export const metadata: Metadata = {
   title: 'Saathi - Your AI Saathi',
   description: 'An AI-powered saathi that learns your personality, habits, and goals to provide personalized guidance and decision support.',
   generator: 'v0.app',
   icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
+    icon: '/faviicon.png',
+    shortcut: '/faviicon.png',
+    apple: '/faviicon.png',
   },
 }
 
@@ -46,7 +35,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="bg-background" suppressHydrationWarning>
-      <body className={`${plusJakarta.variable} ${sora.variable} font-sans antialiased`}>
+      <body className={`${plusJakarta.variable} ${sora.variable} ${playfair.variable} font-sans antialiased`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

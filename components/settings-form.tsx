@@ -3,8 +3,10 @@
 import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { BellRing, Brain, Check, LogOut, Save, Settings, Upload, User, Volume2, X } from 'lucide-react'
-import type { Profile, TwinProfile } from '@/lib/types'
+import { BellRing, Brain, Check, ChevronDown, ChevronUp, LogOut, RotateCcw, Save, Settings, Sparkles, Upload, User, Volume2, X } from 'lucide-react'
+import { AvatarPreview } from '@/components/avatar-preview'
+import { DashboardPageHeader, DashboardSection } from '@/components/dashboard-shell'
+import type { AvatarHeadShape, Profile, TwinProfile } from '@/lib/types'
 
 interface SettingsFormProps {
   profile: Profile | null
@@ -31,6 +33,16 @@ const TWIN_COLOR_PRESETS = [
   { name: 'Rose', head: '#e11d48', body: '#be123c' },
   { name: 'Sunset', head: '#f97316', body: '#ea580c' },
   { name: 'Mint', head: '#10b981', body: '#059669' },
+]
+
+const HEAD_SHAPES: Array<{ value: AvatarHeadShape; label: string }> = [
+  { value: 'circle', label: 'Circle' },
+  { value: 'square', label: 'Square' },
+  { value: 'rectangle', label: 'Rectangle' },
+  { value: 'cylinder', label: 'Cylinder' },
+  { value: 'triangle', label: 'Triangle' },
+  { value: 'pentagon', label: 'Pentagon' },
+  { value: 'star', label: 'Star' },
 ]
 
 type Pan = { x: number; y: number }
@@ -76,8 +88,10 @@ export function SettingsForm({ profile, twinProfile, userEmail }: SettingsFormPr
           : '1',
       notificationsEnabled:
         twinProfile.ai_personality_model?.preferences?.global_notifications_enabled !== false,
+      voiceTone: twinProfile.ai_personality_model?.voice_tone || 'warm',
       headColor: twinProfile.ai_personality_model?.avatar_appearance?.head_color || '#0d9488',
       bodyColor: twinProfile.ai_personality_model?.avatar_appearance?.body_color || '#0f766e',
+      headShape: normalizeHeadShape(twinProfile.ai_personality_model?.avatar_appearance?.head_shape),
       goalsText: (twinProfile.goals || []).join('\n'),
       habitsText: (twinProfile.daily_habits || []).join('\n'),
     }),
@@ -89,8 +103,10 @@ export function SettingsForm({ profile, twinProfile, userEmail }: SettingsFormPr
       twinProfile.ai_personality_model?.decision_making,
       twinProfile.ai_personality_model?.speech_rate,
       twinProfile.ai_personality_model?.preferences?.global_notifications_enabled,
+      twinProfile.ai_personality_model?.voice_tone,
       twinProfile.ai_personality_model?.avatar_appearance?.head_color,
       twinProfile.ai_personality_model?.avatar_appearance?.body_color,
+      twinProfile.ai_personality_model?.avatar_appearance?.head_shape,
       twinProfile.goals,
       twinProfile.daily_habits,
     ],
@@ -101,6 +117,10 @@ export function SettingsForm({ profile, twinProfile, userEmail }: SettingsFormPr
   const [isEditingData, setIsEditingData] = useState(false)
   const [isSavingProfile, setIsSavingProfile] = useState(false)
   const [isSavingTwin, setIsSavingTwin] = useState(false)
+  const [isSavingPreferences, setIsSavingPreferences] = useState(false)
+  const [isAccountOpen, setIsAccountOpen] = useState(true)
+  const [isTwinCustomizeOpen, setIsTwinCustomizeOpen] = useState(false)
+  const [isPreferencesOpen, setIsPreferencesOpen] = useState(true)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [isRunningDangerAction, setIsRunningDangerAction] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -166,8 +186,6 @@ export function SettingsForm({ profile, twinProfile, userEmail }: SettingsFormPr
     setSaveSuccess(null)
     setIsSavingTwin(true)
 
-    const parsedGoals = parseMultilineList(twinData.goalsText)
-    const parsedHabits = parseMultilineList(twinData.habitsText)
     const headColor = normalizeHexColor(twinData.headColor, '#0d9488')
     const bodyColor = normalizeHexColor(twinData.bodyColor, '#0f766e')
     const speechRate = clampSpeechRate(Number(twinData.speechRate || 1))
@@ -182,19 +200,15 @@ export function SettingsForm({ profile, twinProfile, userEmail }: SettingsFormPr
           ...twinProfile.ai_personality_model,
           communication_style: twinData.communicationStyle,
           decision_making: twinData.decisionMakingStyle,
+          voice_tone: twinData.voiceTone,
           speech_rate: speechRate,
-          preferences: {
-            ...(twinProfile.ai_personality_model?.preferences || {}),
-            global_notifications_enabled: Boolean(twinData.notificationsEnabled),
-          },
           avatar_appearance: {
             ...(twinProfile.ai_personality_model?.avatar_appearance || {}),
             head_color: headColor,
             body_color: bodyColor,
+            head_shape: normalizeHeadShape(twinData.headShape),
           },
         },
-        goals: parsedGoals,
-        daily_habits: parsedHabits,
         updated_at: new Date().toISOString(),
       })
       .eq('id', twinProfile.id)
@@ -207,6 +221,40 @@ export function SettingsForm({ profile, twinProfile, userEmail }: SettingsFormPr
     }
 
     setSaveSuccess('Twin personalization updated.')
+    router.refresh()
+  }
+
+  async function handleSavePreferences() {
+    setSaveError(null)
+    setSaveSuccess(null)
+    setIsSavingPreferences(true)
+
+    const parsedGoals = parseMultilineList(twinData.goalsText)
+    const parsedHabits = parseMultilineList(twinData.habitsText)
+
+    const { error } = await supabase
+      .from('twin_profiles')
+      .update({
+        ai_personality_model: {
+          ...twinProfile.ai_personality_model,
+          preferences: {
+            ...(twinProfile.ai_personality_model?.preferences || {}),
+            global_notifications_enabled: Boolean(twinData.notificationsEnabled),
+          },
+        },
+        goals: parsedGoals,
+        daily_habits: parsedHabits,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', twinProfile.id)
+
+    setIsSavingPreferences(false)
+    if (error) {
+      setSaveError(error.message)
+      return
+    }
+
+    setSaveSuccess('Preferences updated.')
     router.refresh()
   }
 
@@ -351,34 +399,45 @@ export function SettingsForm({ profile, twinProfile, userEmail }: SettingsFormPr
     setShowCropModal(false)
   }
 
+  function handleRewatchTutorial() {
+    window.dispatchEvent(new Event('saathi-open-tutorial'))
+  }
+
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl lg:text-3xl font-bold text-foreground" style={{ fontFamily: 'var(--font-display)' }}>
-          Settings
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Manage account privacy and tune your twin with precise controls.
-        </p>
-      </div>
+      <DashboardPageHeader
+        title="Settings"
+        description="Manage account privacy and tune your twin with precise controls."
+      />
 
-      <section id="account-section" className="bg-card rounded-2xl border border-border p-6 space-y-6">
+      <section id="account-section" className="bg-card rounded-2xl border border-border p-5 md:p-6 space-y-6 tm-panel">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-semibold text-foreground flex items-center gap-2">
             <User className="w-5 h-5 text-primary" />
             Account
           </h2>
-          <div className="flex flex-wrap gap-2">
-            <PillButton onClick={() => setIsEditingData(true)} disabled={isEditingData}>
-              Edit Data
-            </PillButton>
-            <PillButton onClick={triggerUpload} disabled={!isEditingData}>
-              Upload Profile Photo
-            </PillButton>
-          </div>
+          <button
+            type="button"
+            onClick={() => setIsAccountOpen((current) => !current)}
+            className="inline-flex items-center gap-2 rounded-xl border border-primary/40 px-4 py-2 text-sm text-primary hover:bg-primary/10"
+          >
+            {isAccountOpen ? 'Collapse' : 'Expand'}
+            {isAccountOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
         </div>
 
-        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onFileSelected} />
+        {isAccountOpen && (
+          <>
+            <div className="flex flex-wrap gap-2">
+              <PillButton onClick={() => setIsEditingData(true)} disabled={isEditingData}>
+                Edit Data
+              </PillButton>
+              <PillButton onClick={triggerUpload} disabled={!isEditingData}>
+                Upload Profile Photo
+              </PillButton>
+            </div>
+
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onFileSelected} />
 
         <div className="flex items-center gap-4">
           <button
@@ -458,245 +517,359 @@ export function SettingsForm({ profile, twinProfile, userEmail }: SettingsFormPr
           </div>
         </div>
 
-        {isEditingData && (
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <button
-              onClick={handleCancelProfileEdit}
-              className="px-4 py-2 rounded-xl border border-border text-muted-foreground hover:text-foreground"
-            >
-              Cancel Edit
-            </button>
-            <button
-              onClick={handleSaveProfile}
-              disabled={isSavingProfile}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              <Save className="w-4 h-4" />
-              {isSavingProfile ? 'Saving...' : 'Save Profile'}
-            </button>
+            {isEditingData && (
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <button
+                  onClick={handleCancelProfileEdit}
+                  className="px-4 py-2 rounded-xl border border-border text-muted-foreground hover:text-foreground"
+                >
+                  Cancel Edit
+                </button>
+                <button
+                  onClick={handleSaveProfile}
+                  disabled={isSavingProfile}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  {isSavingProfile ? 'Saving...' : 'Save Profile'}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      <section className="bg-card rounded-2xl border border-border p-5 md:p-6 space-y-5 tm-panel">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-semibold text-foreground flex items-center gap-2">
+            <Brain className="w-5 h-5 text-primary" />
+            Twin Personalization
+          </h2>
+          <button
+            type="button"
+            onClick={() => setIsTwinCustomizeOpen((current) => !current)}
+            className="inline-flex items-center gap-2 rounded-xl border border-primary/40 px-4 py-2 text-sm text-primary hover:bg-primary/10"
+          >
+            Customize Twin
+            {isTwinCustomizeOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+        </div>
+
+        {isTwinCustomizeOpen && (
+          <div className="space-y-6 rounded-2xl border border-border bg-background/35 p-4 md:p-5">
+            <div className="rounded-2xl border border-border bg-card/70 p-4">
+              <p className="mb-3 text-sm font-medium text-foreground">Live Twin Preview</p>
+              <div className="mx-auto flex w-fit flex-col items-center gap-2">
+                <div className="h-28 w-28 rounded-2xl bg-background/70 ring-1 ring-primary/20 flex items-center justify-center">
+                  <AvatarPreview
+                    expression="happy"
+                    size="md"
+                    headColor={normalizeHexColor(twinData.headColor, '#0d9488')}
+                    bodyColor={normalizeHexColor(twinData.bodyColor, '#0f766e')}
+                    headShape={normalizeHeadShape(twinData.headShape)}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">{twinData.twinName || 'Your twin'}</p>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <Field label="Twin Name">
+                <input
+                  type="text"
+                  value={twinData.twinName}
+                  onChange={(e) => setTwinData({ ...twinData, twinName: e.target.value })}
+                  className={inputClass(false)}
+                />
+              </Field>
+              <Field label="Age">
+                <input
+                  type="number"
+                  min={13}
+                  max={120}
+                  value={twinData.age}
+                  onChange={(e) => setTwinData({ ...twinData, age: e.target.value })}
+                  className={inputClass(false)}
+                />
+              </Field>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+                <Volume2 className="w-4 h-4 text-primary" />
+                Voice Preference
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <ChoiceButton
+                  active={twinData.voicePreference === 'female'}
+                  onClick={() => setTwinData({ ...twinData, voicePreference: 'female' })}
+                  title="Female Voice"
+                  subtitle="Warm and empathetic"
+                />
+                <ChoiceButton
+                  active={twinData.voicePreference === 'male'}
+                  onClick={() => setTwinData({ ...twinData, voicePreference: 'male' })}
+                  title="Male Voice"
+                  subtitle="Calm and supportive"
+                />
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <Field label="Voice Tone">
+                <select
+                  value={twinData.voiceTone}
+                  onChange={(e) => setTwinData({ ...twinData, voiceTone: e.target.value as any })}
+                  className={inputClass(false)}
+                >
+                  <option value="warm">Warm</option>
+                  <option value="calm">Calm</option>
+                  <option value="energetic">Energetic</option>
+                  <option value="soft">Soft</option>
+                  <option value="deep">Deep</option>
+                </select>
+              </Field>
+              <Field label="Speech Rate">
+                <div className="space-y-2">
+                  <input
+                    type="range"
+                    min={0.7}
+                    max={1.3}
+                    step={0.05}
+                    value={Number(twinData.speechRate || 1)}
+                    onChange={(e) => setTwinData({ ...twinData, speechRate: e.target.value })}
+                    className="w-full"
+                  />
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Slower</span>
+                    <span className="font-medium text-foreground">{Number(twinData.speechRate || 1).toFixed(2)}x</span>
+                    <span>Faster</span>
+                  </div>
+                </div>
+              </Field>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <Field label="Communication Style">
+                <select
+                  value={twinData.communicationStyle}
+                  onChange={(e) => setTwinData({ ...twinData, communicationStyle: e.target.value as any })}
+                  className={inputClass(false)}
+                >
+                  <option value="encouraging">Encouraging</option>
+                  <option value="casual">Casual</option>
+                  <option value="formal">Formal</option>
+                  <option value="direct">Direct</option>
+                </select>
+              </Field>
+              <Field label="Decision Coaching Style">
+                <select
+                  value={twinData.decisionMakingStyle}
+                  onChange={(e) => setTwinData({ ...twinData, decisionMakingStyle: e.target.value as any })}
+                  className={inputClass(false)}
+                >
+                  <option value="collaborative">Collaborative</option>
+                  <option value="analytical">Analytical</option>
+                  <option value="intuitive">Intuitive</option>
+                  <option value="decisive">Decisive</option>
+                </select>
+              </Field>
+            </div>
+
+            <Field label="Head Shape">
+              <div className="flex flex-wrap gap-2">
+                {HEAD_SHAPES.map((shape) => (
+                  <button
+                    key={shape.value}
+                    type="button"
+                    onClick={() => setTwinData({ ...twinData, headShape: shape.value })}
+                    className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                      normalizeHeadShape(twinData.headShape) === shape.value
+                        ? 'border-primary bg-primary/15 text-primary'
+                        : 'border-border text-foreground hover:border-primary/50'
+                    }`}
+                  >
+                    {shape.label}
+                  </button>
+                ))}
+              </div>
+            </Field>
+
+            <div>
+              <h3 className="text-sm font-medium text-foreground mb-3">Twin Color</h3>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+                {TWIN_COLOR_PRESETS.map((preset) => (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    onClick={() => setTwinData({ ...twinData, headColor: preset.head, bodyColor: preset.body })}
+                    className="rounded-xl border border-border p-3 text-left hover:border-primary/60 transition-colors"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="h-6 w-6 rounded-full border border-border" style={{ backgroundColor: preset.head }} />
+                      <span className="h-6 w-6 rounded-full border border-border" style={{ backgroundColor: preset.body }} />
+                    </div>
+                    <p className="text-sm font-medium text-foreground">{preset.name}</p>
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <Field label="Head Color">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={normalizeHexColor(twinData.headColor, '#0d9488')}
+                      onChange={(e) => setTwinData({ ...twinData, headColor: e.target.value })}
+                      className="h-10 w-12 rounded-lg border border-border bg-input p-1"
+                    />
+                    <input
+                      type="text"
+                      value={twinData.headColor}
+                      onChange={(e) => setTwinData({ ...twinData, headColor: e.target.value })}
+                      className={inputClass(false)}
+                      placeholder="#0d9488"
+                    />
+                  </div>
+                </Field>
+                <Field label="Body Color">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={normalizeHexColor(twinData.bodyColor, '#0f766e')}
+                      onChange={(e) => setTwinData({ ...twinData, bodyColor: e.target.value })}
+                      className="h-10 w-12 rounded-lg border border-border bg-input p-1"
+                    />
+                    <input
+                      type="text"
+                      value={twinData.bodyColor}
+                      onChange={(e) => setTwinData({ ...twinData, bodyColor: e.target.value })}
+                      className={inputClass(false)}
+                      placeholder="#0f766e"
+                    />
+                  </div>
+                </Field>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={handleSaveTwinPersonalization}
+                disabled={isSavingTwin}
+                className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-primary-foreground transition-all ${
+                  isSavingTwin
+                    ? 'bg-primary/85 animate-pulse'
+                    : 'bg-primary hover:bg-primary/90 hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgb(var(--app-glow)_/_0.3)]'
+                }`}
+              >
+                <Sparkles className={`w-4 h-4 ${isSavingTwin ? 'animate-spin' : ''}`} />
+                {isSavingTwin ? 'Saving Twin...' : 'Save Twin'}
+              </button>
+            </div>
           </div>
         )}
       </section>
 
-      <section className="bg-card rounded-2xl border border-border p-6 space-y-6">
-        <h2 className="font-semibold text-foreground flex items-center gap-2">
-          <Brain className="w-5 h-5 text-primary" />
-          Twin Personalization
-        </h2>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          <Field label="Twin Name">
-            <input
-              type="text"
-              value={twinData.twinName}
-              onChange={(e) => setTwinData({ ...twinData, twinName: e.target.value })}
-              className={inputClass(false)}
-            />
-          </Field>
-          <Field label="Age">
-            <input
-              type="number"
-              min={13}
-              max={120}
-              value={twinData.age}
-              onChange={(e) => setTwinData({ ...twinData, age: e.target.value })}
-              className={inputClass(false)}
-            />
-          </Field>
-        </div>
-
-        <div>
-          <h3 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
-            <Volume2 className="w-4 h-4 text-primary" />
-            Voice Preference
-          </h3>
-          <div className="grid grid-cols-2 gap-4">
-            <ChoiceButton
-              active={twinData.voicePreference === 'female'}
-              onClick={() => setTwinData({ ...twinData, voicePreference: 'female' })}
-              title="Female Voice"
-              subtitle="Warm and empathetic"
-            />
-            <ChoiceButton
-              active={twinData.voicePreference === 'male'}
-              onClick={() => setTwinData({ ...twinData, voicePreference: 'male' })}
-              title="Male Voice"
-              subtitle="Calm and supportive"
-            />
-          </div>
-        </div>
-
-        <Field label="Speech Rate">
-          <div className="space-y-2">
-            <input
-              type="range"
-              min={0.7}
-              max={1.3}
-              step={0.05}
-              value={Number(twinData.speechRate || 1)}
-              onChange={(e) => setTwinData({ ...twinData, speechRate: e.target.value })}
-              className="w-full"
-            />
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Slower</span>
-              <span className="font-medium text-foreground">{Number(twinData.speechRate || 1).toFixed(2)}x</span>
-              <span>Faster</span>
-            </div>
-          </div>
-        </Field>
-
-        <div className="rounded-2xl border border-border bg-background/35 p-4">
-          <h3 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
-            <BellRing className="w-4 h-4 text-primary" />
+      <section className="bg-card rounded-2xl border border-border p-5 md:p-6 space-y-5 tm-panel">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-semibold text-foreground flex items-center gap-2">
+            <BellRing className="w-5 h-5 text-primary" />
             Preferences
-          </h3>
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card/70 px-3 py-2">
-            <div>
-              <p className="text-sm font-medium text-foreground">Global AI Reminders</p>
-              <p className="text-xs text-muted-foreground">
-                Show top-right reminders for tomorrow&apos;s events and late-night rest prompts.
-              </p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={Boolean(twinData.notificationsEnabled)}
-              onClick={() =>
-                setTwinData((current) => ({ ...current, notificationsEnabled: !current.notificationsEnabled }))
-              }
-              className={`relative h-7 w-12 rounded-full border transition-colors ${
-                twinData.notificationsEnabled ? 'border-primary/60 bg-primary/25' : 'border-border bg-muted'
-              }`}
-            >
-              <span
-                className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${
-                  twinData.notificationsEnabled ? 'left-6' : 'left-1'
-                }`}
-              />
-            </button>
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          <Field label="Communication Style">
-            <select
-              value={twinData.communicationStyle}
-              onChange={(e) => setTwinData({ ...twinData, communicationStyle: e.target.value as any })}
-              className={inputClass(false)}
-            >
-              <option value="encouraging">Encouraging</option>
-              <option value="casual">Casual</option>
-              <option value="formal">Formal</option>
-              <option value="direct">Direct</option>
-            </select>
-          </Field>
-          <Field label="Decision Coaching Style">
-            <select
-              value={twinData.decisionMakingStyle}
-              onChange={(e) => setTwinData({ ...twinData, decisionMakingStyle: e.target.value as any })}
-              className={inputClass(false)}
-            >
-              <option value="collaborative">Collaborative</option>
-              <option value="analytical">Analytical</option>
-              <option value="intuitive">Intuitive</option>
-              <option value="decisive">Decisive</option>
-            </select>
-          </Field>
-        </div>
-
-        <div>
-          <h3 className="text-sm font-medium text-foreground mb-3">Twin Color</h3>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
-            {TWIN_COLOR_PRESETS.map((preset) => (
-              <button
-                key={preset.name}
-                type="button"
-                onClick={() => setTwinData({ ...twinData, headColor: preset.head, bodyColor: preset.body })}
-                className="rounded-xl border border-border p-3 text-left hover:border-primary/60 transition-colors"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="h-6 w-6 rounded-full border border-border" style={{ backgroundColor: preset.head }} />
-                  <span className="h-6 w-6 rounded-full border border-border" style={{ backgroundColor: preset.body }} />
-                </div>
-                <p className="text-sm font-medium text-foreground">{preset.name}</p>
-              </button>
-            ))}
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-4">
-            <Field label="Head Color">
-              <div className="flex items-center gap-2">
-                <input
-                  type="color"
-                  value={normalizeHexColor(twinData.headColor, '#0d9488')}
-                  onChange={(e) => setTwinData({ ...twinData, headColor: e.target.value })}
-                  className="h-10 w-12 rounded-lg border border-border bg-input p-1"
-                />
-                <input
-                  type="text"
-                  value={twinData.headColor}
-                  onChange={(e) => setTwinData({ ...twinData, headColor: e.target.value })}
-                  className={inputClass(false)}
-                  placeholder="#0d9488"
-                />
-              </div>
-            </Field>
-            <Field label="Body Color">
-              <div className="flex items-center gap-2">
-                <input
-                  type="color"
-                  value={normalizeHexColor(twinData.bodyColor, '#0f766e')}
-                  onChange={(e) => setTwinData({ ...twinData, bodyColor: e.target.value })}
-                  className="h-10 w-12 rounded-lg border border-border bg-input p-1"
-                />
-                <input
-                  type="text"
-                  value={twinData.bodyColor}
-                  onChange={(e) => setTwinData({ ...twinData, bodyColor: e.target.value })}
-                  className={inputClass(false)}
-                  placeholder="#0f766e"
-                />
-              </div>
-            </Field>
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          <Field label="Goals (one per line)">
-            <textarea
-              value={twinData.goalsText}
-              onChange={(e) => setTwinData({ ...twinData, goalsText: e.target.value })}
-              rows={6}
-              className={inputClass(false)}
-            />
-          </Field>
-          <Field label="Daily Habits (one per line)">
-            <textarea
-              value={twinData.habitsText}
-              onChange={(e) => setTwinData({ ...twinData, habitsText: e.target.value })}
-              rows={6}
-              className={inputClass(false)}
-            />
-          </Field>
-        </div>
-
-        <div className="flex justify-end">
+          </h2>
           <button
-            onClick={handleSaveTwinPersonalization}
-            disabled={isSavingTwin}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            type="button"
+            onClick={() => setIsPreferencesOpen((current) => !current)}
+            className="inline-flex items-center gap-2 rounded-xl border border-primary/40 px-4 py-2 text-sm text-primary hover:bg-primary/10"
           >
-            <Brain className="w-4 h-4" />
-            {isSavingTwin ? 'Saving...' : 'Save Twin'}
+            {isPreferencesOpen ? 'Collapse' : 'Expand'}
+            {isPreferencesOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
         </div>
+
+        {isPreferencesOpen && (
+          <>
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card/70 px-3 py-2">
+              <div>
+                <p className="text-sm font-medium text-foreground">Global AI Reminders</p>
+                <p className="text-xs text-muted-foreground">
+                  Show top-right reminders for tomorrow&apos;s events and late-night rest prompts.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={Boolean(twinData.notificationsEnabled)}
+                onClick={() =>
+                  setTwinData((current) => ({ ...current, notificationsEnabled: !current.notificationsEnabled }))
+                }
+                className={`relative h-7 w-12 rounded-full border transition-colors ${
+                  twinData.notificationsEnabled ? 'border-primary/60 bg-primary/25' : 'border-border bg-muted'
+                }`}
+              >
+                <span
+                  className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${
+                    twinData.notificationsEnabled ? 'left-6' : 'left-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-border bg-background/35 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Tutorial</p>
+                  <p className="text-xs text-muted-foreground">Need a quick feature walkthrough again?</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRewatchTutorial}
+                  className="inline-flex items-center gap-2 rounded-lg border border-primary/40 px-3 py-2 text-sm text-primary hover:bg-primary/10"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Rewatch Tutorial
+                </button>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <Field label="Goals (one per line)">
+                <textarea
+                  value={twinData.goalsText}
+                  onChange={(e) => setTwinData({ ...twinData, goalsText: e.target.value })}
+                  rows={6}
+                  className={inputClass(false)}
+                />
+              </Field>
+              <Field label="Daily Habits (one per line)">
+                <textarea
+                  value={twinData.habitsText}
+                  onChange={(e) => setTwinData({ ...twinData, habitsText: e.target.value })}
+                  rows={6}
+                  className={inputClass(false)}
+                />
+              </Field>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={handleSavePreferences}
+                disabled={isSavingPreferences}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              >
+                <Save className={`h-4 w-4 ${isSavingPreferences ? 'animate-spin' : ''}`} />
+                {isSavingPreferences ? 'Saving Preferences...' : 'Save Preferences'}
+              </button>
+            </div>
+          </>
+        )}
       </section>
 
-      <section className="bg-card rounded-2xl border border-border p-6">
-        <h2 className="font-semibold text-foreground flex items-center gap-2 mb-4">
-          <Settings className="w-5 h-5 text-primary" />
-          Account Actions
-        </h2>
+      <DashboardSection
+        title="Account Actions"
+        icon={Settings}
+        collapsible
+        defaultOpen={false}
+      >
         <div className="flex flex-wrap gap-3">
           <button
             onClick={handleSignOut}
@@ -728,7 +901,7 @@ export function SettingsForm({ profile, twinProfile, userEmail }: SettingsFormPr
             Delete Account
           </button>
         </div>
-      </section>
+      </DashboardSection>
 
       {(saveError || saveSuccess) && (
         <div className="text-sm">
@@ -928,6 +1101,12 @@ function normalizeHexColor(value: string, fallback: string) {
 function clampSpeechRate(value: number) {
   if (!Number.isFinite(value)) return 1
   return Math.min(1.3, Math.max(0.7, Number(value.toFixed(2))))
+}
+
+function normalizeHeadShape(value: unknown): AvatarHeadShape {
+  const raw = String(value || '').toLowerCase()
+  const allowed: AvatarHeadShape[] = ['circle', 'square', 'rectangle', 'cylinder', 'triangle', 'pentagon', 'star']
+  return allowed.includes(raw as AvatarHeadShape) ? (raw as AvatarHeadShape) : 'circle'
 }
 
 function clampPan(pan: Pan, zoom: number, naturalSize: { width: number; height: number }) {

@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useSearchParams } from 'next/navigation'
 import { AlertCircle, Brain, ChevronLeft, ChevronRight, Mic, MicOff, RefreshCw, Send, Volume2, VolumeX } from 'lucide-react'
 import { AvatarPreview } from './avatar-preview'
-import type { TwinProfile, ChatMessage } from '@/lib/types'
+import type { AvatarHeadShape, TwinProfile, ChatMessage } from '@/lib/types'
 
 interface ChatInterfaceProps {
   twinProfile: TwinProfile
@@ -364,8 +364,22 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
     await waitForVoices()
 
     const utterance = new SpeechSynthesisUtterance(trimmedText)
-    utterance.rate = twinSpeechRate
-    utterance.pitch = twinProfile.voice_preference === 'female' ? 1.1 : 0.9
+    const tonePitchMap: Record<'warm' | 'calm' | 'energetic' | 'soft' | 'deep', number> = {
+      warm: twinProfile.voice_preference === 'female' ? 1.08 : 0.94,
+      calm: twinProfile.voice_preference === 'female' ? 1.02 : 0.9,
+      energetic: twinProfile.voice_preference === 'female' ? 1.18 : 1.02,
+      soft: twinProfile.voice_preference === 'female' ? 1.12 : 0.96,
+      deep: twinProfile.voice_preference === 'female' ? 0.95 : 0.82,
+    }
+    const toneRateMap: Record<'warm' | 'calm' | 'energetic' | 'soft' | 'deep', number> = {
+      warm: 1,
+      calm: 0.95,
+      energetic: 1.08,
+      soft: 0.9,
+      deep: 0.92,
+    }
+    utterance.rate = Math.min(1.35, Math.max(0.65, twinSpeechRate * toneRateMap[twinVoiceTone]))
+    utterance.pitch = tonePitchMap[twinVoiceTone]
 
     const selectedVoice = getPreferredVoice()
     if (selectedVoice) {
@@ -419,7 +433,7 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
 
     speakMessageText(text, latestAssistant.id, 'auto')
     lastSpokenMessageIdRef.current = latestAssistant.id
-  }, [messages, isVoiceEnabled, twinProfile.voice_preference, status])
+  }, [messages, isVoiceEnabled, twinProfile.voice_preference, twinSpeechRate, twinVoiceTone, status])
 
   useEffect(() => {
     if (!isConversationMode) return
@@ -555,7 +569,10 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
     const bodyColor = /^#[0-9a-fA-F]{6}$/.test(appearance?.body_color || '')
       ? String(appearance?.body_color)
       : '#0f766e'
-    return { headColor, bodyColor }
+    const validShapes: AvatarHeadShape[] = ['circle', 'square', 'rectangle', 'cylinder', 'triangle', 'pentagon', 'star']
+    const rawShape = String(appearance?.head_shape || 'circle') as AvatarHeadShape
+    const headShape = validShapes.includes(rawShape) ? rawShape : 'circle'
+    return { headColor, bodyColor, headShape }
   }, [twinProfile.ai_personality_model?.avatar_appearance])
 
   const twinSpeechRate = useMemo(() => {
@@ -563,6 +580,14 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
     if (typeof value !== 'number' || !Number.isFinite(value)) return 1
     return Math.min(1.3, Math.max(0.7, Number(value.toFixed(2))))
   }, [twinProfile.ai_personality_model?.speech_rate])
+
+  const twinVoiceTone = useMemo(() => {
+    const tone = String(twinProfile.ai_personality_model?.voice_tone || 'warm')
+    if (['warm', 'calm', 'energetic', 'soft', 'deep'].includes(tone)) {
+      return tone as 'warm' | 'calm' | 'energetic' | 'soft' | 'deep'
+    }
+    return 'warm'
+  }, [twinProfile.ai_personality_model?.voice_tone])
 
   const avatarExpression = useMemo(() => {
     if (error || voiceError) return 'shocked'
@@ -696,8 +721,8 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
   }, [emotionMeta])
 
   return (
-    <div className="chat-pattern-bg flex h-full flex-col">
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card">
+    <div className="chat-pattern-bg tm-panel flex h-full flex-col overflow-hidden rounded-2xl border border-border">
+      <div className="sticky top-0 z-10 flex items-center gap-3 px-4 py-3 border-b border-border bg-card/95 backdrop-blur">
         <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 ring-1 ring-primary/15">
           <AvatarPreview
             expression={avatarExpression}
@@ -705,6 +730,7 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
             mode="profile"
             headColor={twinAvatarColors.headColor}
             bodyColor={twinAvatarColors.bodyColor}
+            headShape={twinAvatarColors.headShape}
           />
         </div>
         <div className="min-w-0 flex-1">
@@ -759,7 +785,7 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
               <div className="w-full max-w-xl rounded-3xl border border-border bg-card/80 p-5 md:p-8">
                 <div className="mx-auto flex h-[42vh] max-h-[480px] min-h-[260px] items-center justify-center rounded-3xl bg-background/80 ring-1 ring-primary/20">
                   <div className="h-[75%] w-[75%] max-h-[360px] max-w-[360px]">
-                     <AvatarPreview expression={avatarExpression} size="lg" headColor={twinAvatarColors.headColor} bodyColor={twinAvatarColors.bodyColor} />
+                     <AvatarPreview expression={avatarExpression} size="lg" headColor={twinAvatarColors.headColor} bodyColor={twinAvatarColors.bodyColor} headShape={twinAvatarColors.headShape} />
                   </div>
                 </div>
                 <div className="mt-4 text-center">
@@ -788,7 +814,7 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
                   <p className="mt-1 text-sm text-foreground">{liveAssistantCaption || (isLoading ? 'Thinking...' : 'Ready')}</p>
                 </div>
                 {voiceError && (
-                  <div className="rounded-xl bg-amber-100 text-amber-900 px-3 py-2 text-xs">
+                  <div className="rounded-xl border border-amber-400/30 bg-amber-400/15 px-3 py-2 text-xs text-foreground">
                     {voiceError}
                   </div>
                 )}
@@ -861,6 +887,7 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
           twinName={twinProfile.name}
           headColor={twinAvatarColors.headColor}
           bodyColor={twinAvatarColors.bodyColor}
+          headShape={twinAvatarColors.headShape}
         />
 
           <div className="flex min-h-0 flex-1 flex-col">
@@ -868,7 +895,7 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
               <div className="rounded-2xl border border-border bg-card/60 p-3 lg:hidden">
                 <div className="flex items-center gap-3">
                   <div className="h-12 w-12 rounded-xl bg-background/70 ring-1 ring-primary/20 flex items-center justify-center">
-                    <AvatarPreview expression={avatarExpression} size="sm" headColor={twinAvatarColors.headColor} bodyColor={twinAvatarColors.bodyColor} />
+                    <AvatarPreview expression={avatarExpression} size="sm" headColor={twinAvatarColors.headColor} bodyColor={twinAvatarColors.bodyColor} headShape={twinAvatarColors.headShape} />
                   </div>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-foreground">{twinProfile.name}</p>
@@ -880,7 +907,7 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
               {messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center h-full text-center px-4">
                   <div className="w-24 h-24 mb-6">
-                    <AvatarPreview expression="happy" size="md" headColor={twinAvatarColors.headColor} bodyColor={twinAvatarColors.bodyColor} />
+                    <AvatarPreview expression="happy" size="md" headColor={twinAvatarColors.headColor} bodyColor={twinAvatarColors.bodyColor} headShape={twinAvatarColors.headShape} />
                   </div>
                   <h2 className="text-xl font-semibold text-foreground mb-2" style={{ fontFamily: 'var(--font-display)' }}>
                     Hi, I&apos;m {twinProfile.name}!
@@ -906,18 +933,20 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
                 </div>
               )}
 
-              <AnimatePresence initial={false}>
-                {messages.map((message) => (
-                  <MessageBubble
-                    key={message.id}
-                    message={message}
-                    twinName={twinProfile.name}
-                    isSpeaking={speakingMessageId === message.id}
-                    isHighlighted={highlightedMessageId === message.id}
-                    onToggleSpeech={handleMessageSpeechToggle}
-                  />
-                ))}
-              </AnimatePresence>
+              <div className="mx-auto w-full max-w-5xl space-y-4">
+                <AnimatePresence initial={false}>
+                  {messages.map((message) => (
+                    <MessageBubble
+                      key={message.id}
+                      message={message}
+                      twinName={twinProfile.name}
+                      isSpeaking={speakingMessageId === message.id}
+                      isHighlighted={highlightedMessageId === message.id}
+                      onToggleSpeech={handleMessageSpeechToggle}
+                    />
+                  ))}
+                </AnimatePresence>
+              </div>
 
               {error && (
                 <div className="p-4 rounded-xl bg-destructive/10 text-destructive text-sm flex items-start justify-between gap-3">
@@ -936,7 +965,7 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
               )}
 
               {voiceError && (
-                <div className="p-3 rounded-xl bg-amber-100 text-amber-900 text-sm">
+                <div className="p-3 rounded-xl border border-amber-400/30 bg-amber-400/15 text-sm text-foreground">
                   {voiceError}
                 </div>
               )}
@@ -944,8 +973,8 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
               <div ref={messagesEndRef} />
             </div>
 
-            <div className="border-t border-border bg-card p-4">
-              <form onSubmit={handleSubmit} className="flex items-center gap-3">
+            <div className="border-t border-border bg-card/95 backdrop-blur p-4">
+              <form onSubmit={handleSubmit} className="mx-auto flex w-full max-w-5xl items-center gap-3">
                 <button
                   type="button"
                   onClick={toggleListening}
@@ -1051,6 +1080,7 @@ function SpriteDock({
   twinName,
   headColor,
   bodyColor,
+  headShape,
 }: {
   collapsed: boolean
   onToggleCollapse: () => void
@@ -1059,6 +1089,7 @@ function SpriteDock({
   twinName: string
   headColor: string
   bodyColor: string
+  headShape: AvatarHeadShape
 }) {
   return (
     <aside
@@ -1085,7 +1116,7 @@ function SpriteDock({
           transition={{ duration: 0.25 }}
           className={`${collapsed ? 'w-14 h-14' : 'w-40 h-40'} rounded-3xl bg-background/70 ring-1 ring-primary/20 flex items-center justify-center`}
         >
-          <AvatarPreview expression={expression} size={collapsed ? 'sm' : 'lg'} headColor={headColor} bodyColor={bodyColor} />
+          <AvatarPreview expression={expression} size={collapsed ? 'sm' : 'lg'} headColor={headColor} bodyColor={bodyColor} headShape={headShape} />
         </motion.div>
 
         {!collapsed && (

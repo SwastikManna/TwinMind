@@ -30,7 +30,7 @@ export default async function SettingsPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto pt-16 lg:pt-0 tm-page-shell">
+    <div className="max-w-6xl mx-auto pt-20 lg:pt-6 tm-page-shell">
       <SettingsForm 
         profile={profile}
         twinProfile={twinProfile}

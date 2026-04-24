@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Area, AreaChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { Heart, Loader2, ShieldAlert, Smile, Activity, Trophy, TrendingDown, Flame, Award, Sparkles } from 'lucide-react'
+import { DashboardPageHeader, DashboardSection } from '@/components/dashboard-shell'
 import {
   aggregateMoodByDay,
   calculateMoodEntryStreak,
@@ -74,31 +75,27 @@ export function MoodTracker({ entries }: MoodTrackerProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-foreground" style={{ fontFamily: 'var(--font-display)' }}>
-            Daily Mood Tracker
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Track how each day felt. Your twin learns your emotional patterns over time.
-          </p>
-        </div>
-        <div className="inline-flex rounded-xl border border-border bg-card p-1">
-          {(['7d', '30d', '90d'] as MoodWindow[]).map((item) => (
-            <button
-              key={item}
-              onClick={() => setWindow(item)}
-              className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                window === item ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {item}
-            </button>
-          ))}
-        </div>
-      </div>
+      <DashboardPageHeader
+        title="Daily Mood Tracker"
+        description="Track how each day felt. Your twin learns your emotional patterns over time."
+        actions={
+          <div className="inline-flex rounded-xl border border-border bg-card p-1">
+            {(['7d', '30d', '90d'] as MoodWindow[]).map((item) => (
+              <button
+                key={item}
+                onClick={() => setWindow(item)}
+                className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                  window === item ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+        }
+      />
 
-      <div className="bg-card rounded-2xl border border-border p-6 space-y-4">
+      <DashboardSection title="Daily Reflection" description="60 seconds now, clearer guidance through the day." collapsible defaultOpen>
         <p className="text-sm font-medium text-foreground">How did today go?</p>
         <textarea
           value={reflection}
@@ -139,7 +136,7 @@ export function MoodTracker({ entries }: MoodTrackerProps) {
           {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
           Save daily mood
         </button>
-      </div>
+      </DashboardSection>
 
       <div className="grid md:grid-cols-2 gap-4">
         <div className="bg-card rounded-2xl border border-border p-5">
@@ -199,16 +196,13 @@ export function MoodTracker({ entries }: MoodTrackerProps) {
         </div>
       </div>
 
-      <div className="bg-card rounded-2xl border border-border p-5 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="font-semibold text-foreground inline-flex items-center gap-2">
-            <Award className="h-5 w-5 text-primary" />
-            Streak Rewards
-          </p>
-          <span className="rounded-full bg-primary/10 px-3 py-1 text-sm text-primary">
-            Level {gamification.level}
-          </span>
-        </div>
+      <DashboardSection
+        title="Streak Rewards"
+        icon={Award}
+        right={<span className="rounded-full bg-primary/10 px-3 py-1 text-sm text-primary">Level {gamification.level}</span>}
+        collapsible
+        defaultOpen={false}
+      >
 
         <div>
           <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
@@ -262,7 +256,7 @@ export function MoodTracker({ entries }: MoodTrackerProps) {
             ))}
           </div>
         </div>
-      </div>
+      </DashboardSection>
 
       {stressSpike && (
         <div className="rounded-2xl border border-chart-3/30 bg-chart-3/10 p-4">
@@ -315,8 +309,7 @@ export function MoodTracker({ entries }: MoodTrackerProps) {
         </div>
       </div>
 
-      <div className="bg-card rounded-2xl border border-border p-5">
-        <p className="font-semibold text-foreground mb-4">Recent Daily Notes</p>
+      <DashboardSection title="Recent Daily Notes" collapsible defaultOpen={false}>
         {windowEntries.length === 0 ? (
           <p className="text-sm text-muted-foreground">No mood entries yet. Add your first one above.</p>
         ) : (
@@ -331,7 +324,7 @@ export function MoodTracker({ entries }: MoodTrackerProps) {
             ))}
           </ul>
         )}
-      </div>
+      </DashboardSection>
     </div>
   )
 }

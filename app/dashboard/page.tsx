@@ -9,7 +9,7 @@ import { BehaviorReportCard } from '@/components/behavior-report-card'
 import { fetchMoodEntries } from '@/lib/mood-storage'
 import { calculateMoodEntryStreak, calculateMoodGamification, getMissedMoodDays } from '@/lib/mood'
 import { fetchWeeklyBehaviorReport } from '@/lib/behavior-storage'
-import type { TwinProfile, Insight, MemoryLog } from '@/lib/types'
+import type { AvatarHeadShape, TwinProfile, Insight, MemoryLog } from '@/lib/types'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -77,6 +77,10 @@ export default async function DashboardPage() {
     typeof appearanceData.body_color === 'string' && /^#[0-9a-fA-F]{6}$/.test(appearanceData.body_color)
       ? appearanceData.body_color
       : '#0f766e'
+  const shapeCandidates: AvatarHeadShape[] = ['circle', 'square', 'rectangle', 'cylinder', 'triangle', 'pentagon', 'star']
+  const twinHeadShape = shapeCandidates.includes(appearanceData.head_shape as AvatarHeadShape)
+    ? (appearanceData.head_shape as AvatarHeadShape)
+    : 'circle'
   const fallbackChatHistory = Array.isArray(modelData.chat_history)
     ? (modelData.chat_history as Array<Record<string, unknown>>)
     : []
@@ -127,7 +131,7 @@ export default async function DashboardPage() {
   })
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pt-16 lg:pt-0 tm-page-shell">
+    <div className="max-w-6xl mx-auto space-y-8 pt-20 lg:pt-6 tm-page-shell">
       {/* Welcome Section */}
       <div className="bg-gradient-to-br from-primary/10 via-accent/5 to-primary/5 rounded-2xl p-6 lg:p-8">
         <div className="flex flex-col lg:flex-row lg:items-center gap-6">
@@ -140,7 +144,7 @@ export default async function DashboardPage() {
             </p>
           </div>
           <div className="w-32 h-32 lg:w-40 lg:h-40 flex-shrink-0">
-            <AvatarPreview expression="happy" size="md" headColor={twinHeadColor} bodyColor={twinBodyColor} />
+            <AvatarPreview expression="happy" size="md" headColor={twinHeadColor} bodyColor={twinBodyColor} headShape={twinHeadShape} />
           </div>
         </div>
         <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2 text-sm text-foreground">

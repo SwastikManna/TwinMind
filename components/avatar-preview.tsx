@@ -1,11 +1,13 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import type { AvatarHeadShape } from '@/lib/types'
 
 interface AvatarPreviewProps {
   expression?: 'neutral' | 'happy' | 'thinking' | 'speaking' | 'talking' | 'shocked' | 'sad' | 'angry'
   headColor?: string
   bodyColor?: string
+  headShape?: AvatarHeadShape
   size?: 'sm' | 'md' | 'lg'
   mode?: 'full' | 'profile'
 }
@@ -14,6 +16,7 @@ export function AvatarPreview({
   expression = 'neutral',
   headColor = '#0d9488',
   bodyColor = '#0f766e',
+  headShape = 'circle',
   size = 'lg',
   mode = 'full',
 }: AvatarPreviewProps) {
@@ -48,6 +51,34 @@ export function AvatarPreview({
   const isProfile = mode === 'profile'
   const avatarOffsetX = isProfile ? 0 : size === 'lg' ? 0.9 : 0.2
   const avatarOffsetY = isProfile ? 0 : -0.4
+
+  function renderHeadShape(shape: AvatarHeadShape) {
+    if (shape === 'square') {
+      return <rect x="20" y="15" width="60" height="60" rx="8" fill="url(#headGradient)" filter="url(#glow)" />
+    }
+    if (shape === 'rectangle') {
+      return <rect x="18" y="19" width="64" height="52" rx="9" fill="url(#headGradient)" filter="url(#glow)" />
+    }
+    if (shape === 'cylinder') {
+      return <rect x="23" y="14" width="54" height="62" rx="27" fill="url(#headGradient)" filter="url(#glow)" />
+    }
+    if (shape === 'triangle') {
+      return <path d="M50 14 L84 74 L16 74 Z" fill="url(#headGradient)" filter="url(#glow)" />
+    }
+    if (shape === 'pentagon') {
+      return <path d="M50 12 L82 34 L70 74 L30 74 L18 34 Z" fill="url(#headGradient)" filter="url(#glow)" />
+    }
+    if (shape === 'star') {
+      return (
+        <path
+          d="M50 12 L58 31 L79 33 L63 47 L68 68 L50 57 L32 68 L37 47 L21 33 L42 31 Z"
+          fill="url(#headGradient)"
+          filter="url(#glow)"
+        />
+      )
+    }
+    return <circle cx="50" cy="45" r="30" fill="url(#headGradient)" filter="url(#glow)" />
+  }
 
   return (
     <div
@@ -93,12 +124,7 @@ export function AvatarPreview({
           )}
 
           {/* Head */}
-          <motion.circle
-            cx="50"
-            cy="45"
-            r="30"
-            fill="url(#headGradient)"
-            filter="url(#glow)"
+          <motion.g
             animate={{
               y:
                 expression === 'thinking'
@@ -122,7 +148,9 @@ export function AvatarPreview({
                   : 0,
               ease: 'easeInOut',
             }}
-          />
+          >
+            {renderHeadShape(headShape)}
+          </motion.g>
 
           {/* Left Eye */}
           <motion.ellipse

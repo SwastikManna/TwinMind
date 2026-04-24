@@ -23,7 +23,7 @@ export default async function LandingPage() {
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/12 ring-1 ring-primary/25">
             <Brain className="h-5 w-5 text-primary" />
           </div>
-          <span className="text-2xl font-bold text-foreground" style={{ fontFamily: 'var(--font-display)' }}>
+          <span className="brand-wordmark text-2xl text-foreground">
             Saathi
           </span>
         </Link>
@@ -68,10 +68,7 @@ export default async function LandingPage() {
           <p className="mb-4 inline-flex rounded-full border border-primary/35 bg-primary/10 px-4 py-1.5 text-sm font-semibold tracking-wide text-primary">
             Your AI Digital Twin
           </p>
-          <h1
-            className="text-[clamp(3rem,8vw,5.5rem)] font-bold leading-[1.02] text-foreground"
-            style={{ fontFamily: 'var(--font-display)' }}
-          >
+          <h1 className="brand-wordmark text-[clamp(3rem,8vw,5.5rem)] leading-[1.02] text-foreground">
             Saathi
           </h1>
           <p className="mt-6 max-w-4xl text-[clamp(1.2rem,2.2vw,1.7rem)] leading-relaxed text-muted-foreground">

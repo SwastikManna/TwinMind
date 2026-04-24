@@ -43,7 +43,7 @@ export default async function CalendarPage() {
   const moodDayKeys = Array.from(new Set(moodEntries.map((entry) => entry.created_at.slice(0, 10))))
 
   return (
-    <div className="max-w-6xl mx-auto tm-page-shell">
+    <div className="max-w-6xl mx-auto pt-20 lg:pt-6 tm-page-shell">
       <CalendarPlanner initialEvents={events} moodDayKeys={moodDayKeys} />
     </div>
   )
