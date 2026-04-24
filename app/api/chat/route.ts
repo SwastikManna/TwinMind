@@ -10,8 +10,20 @@ import { getLanguageModel, getObjectGenerationProviderOptions } from '@/lib/ai'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { logTelemetryEvent } from '@/lib/telemetry'
-import { inferMoodScoresFromText } from '@/lib/mood'
-import { saveMoodEntry } from '@/lib/mood-storage'
+import { getMissedMoodDays, inferMoodScoresFromText } from '@/lib/mood'
+import { fetchMoodEntries, saveMoodEntry } from '@/lib/mood-storage'
+import { inferBehaviorEntries } from '@/lib/behavior'
+import { saveBehaviorEntries } from '@/lib/behavior-storage'
+import {
+  formatEventForPrompt,
+  getCalendarConflicts,
+  getDueReminders,
+  getFallbackCalendarEvents,
+  getPriorityRiskItems,
+  isMissingTableError,
+  normalizeCalendarEvent,
+} from '@/lib/calendar'
+import type { CalendarEvent } from '@/lib/types'
 import { z } from 'zod'
 
 export const maxDuration = 60
@@ -59,7 +71,32 @@ export async function POST(req: Request) {
   }
 
   // Build the system prompt based on the twin profile
-  const systemPrompt = buildTwinSystemPrompt(storedProfile || undefined)
+  const upcomingEvents = await fetchUpcomingEventsForPrompt({
+    supabase,
+    userId: user.id,
+    fallbackModel: storedProfile?.ai_personality_model,
+  })
+
+  const riskCoachingContext = buildRiskCoachingContext({
+    latestUserText,
+    upcomingEvents,
+  })
+  const plannerIntelligenceContext = buildPlannerIntelligenceContext(upcomingEvents)
+  const moodEntries = await fetchMoodEntries(supabase, user.id)
+  const missedMoodDays = getMissedMoodDays({
+    entries: moodEntries,
+    maxDays: 5,
+    includeToday: false,
+  })
+  const checkinContext = buildMissedCheckinContext(missedMoodDays)
+
+  const systemPrompt = buildTwinSystemPrompt(
+    storedProfile || undefined,
+    upcomingEvents,
+    riskCoachingContext,
+    checkinContext,
+    plannerIntelligenceContext,
+  )
   const result = streamText({
     model: getLanguageModel(),
     system: systemPrompt,
@@ -118,6 +155,14 @@ export async function POST(req: Request) {
               userId: user.id,
               userText: userContent,
             })
+
+            await persistBehaviorPointsSnapshot({
+              supabase,
+              userId: user.id,
+              userText: userContent,
+              assistantText: assistantContent,
+              upcomingEvents,
+            })
           }
         }
       } catch (error) {
@@ -168,6 +213,20 @@ interface PersistChatMoodSnapshotParams {
   userText: string
 }
 
+interface PersistBehaviorPointsSnapshotParams {
+  supabase: Awaited<ReturnType<typeof createClient>>
+  userId: string
+  userText: string
+  assistantText: string
+  upcomingEvents: CalendarEvent[]
+}
+
+interface FetchUpcomingEventsParams {
+  supabase: Awaited<ReturnType<typeof createClient>>
+  userId: string
+  fallbackModel?: unknown
+}
+
 const ExtractedSignalsSchema = z.object({
   memoryLogs: z
     .array(
@@ -186,7 +245,13 @@ const ExtractedSignalsSchema = z.object({
     .nullable(),
 })
 
-function buildTwinSystemPrompt(profile?: TwinProfileContext): string {
+function buildTwinSystemPrompt(
+  profile?: TwinProfileContext,
+  upcomingEvents: CalendarEvent[] = [],
+  riskCoachingContext = '',
+  checkinContext = '',
+  plannerIntelligenceContext = '',
+): string {
   if (!profile) {
     return `You are TwinMind, a helpful and empathetic AI digital twin. You aim to understand the user deeply and provide personalized guidance. Be warm, supportive, and thoughtful in your responses. Ask clarifying questions when needed and remember details about the user to build a meaningful relationship. Keep answers concise and practical by default.`
   }
@@ -211,6 +276,10 @@ function buildTwinSystemPrompt(profile?: TwinProfileContext): string {
     ? `The top current goal to prioritize in advice is: ${profile.goals[0]}.`
     : ''
 
+  const eventContext = upcomingEvents.length
+    ? `Upcoming events in the user's planner:\n${upcomingEvents.map((event) => `- ${formatEventForPrompt(event)}`).join('\n')}`
+    : 'There are currently no upcoming planner events available.'
+
   return `You are ${profile.name}'s personal digital twin - an AI companion that deeply understands them and provides personalized guidance.
 
 ${traits}
@@ -218,6 +287,10 @@ ${interests}
 ${goals}
 ${habits}
 ${prioritizedGoal}
+${eventContext}
+${riskCoachingContext}
+${checkinContext}
+${plannerIntelligenceContext}
 
 As their digital twin, you should:
 1. Communicate in a ${profile.communication_style || profile.ai_personality_model?.communication_style || 'warm and encouraging'} manner
@@ -227,6 +300,8 @@ As their digital twin, you should:
 5. Offer emotional support and understanding
 6. Ask thoughtful questions to learn more about them
 7. Remember context from the conversation to build a meaningful relationship
+8. Use the planner event context to answer schedule questions accurately
+9. If the user suggests low-priority plans right before a super-important event, gently warn them and suggest a safer alternative
 
 Response quality rules:
 - Provide short, actionable next steps whenever possible.
@@ -234,6 +309,58 @@ Response quality rules:
 - Ask at most one follow-up question unless the user asks for deeper exploration.
 
 Be genuine, supportive, and insightful. You're not just an AI assistant - you're their personal companion helping them grow and thrive.`
+}
+
+function buildPlannerIntelligenceContext(upcomingEvents: CalendarEvent[]) {
+  if (upcomingEvents.length === 0) return ''
+  const conflicts = getCalendarConflicts(upcomingEvents).slice(0, 3)
+  const reminders = getDueReminders(upcomingEvents, 240).slice(0, 3)
+  const risks = getPriorityRiskItems(upcomingEvents).slice(0, 2)
+
+  const lines: string[] = ['PLANNER INTELLIGENCE CONTEXT:']
+
+  if (conflicts.length > 0) {
+    lines.push(
+      `- Conflicts detected: ${conflicts
+        .map((conflict) => `${conflict.first.title} vs ${conflict.second.title} (${conflict.overlapMinutes}m overlap)`)
+        .join('; ')}`,
+    )
+  }
+
+  if (reminders.length > 0) {
+    lines.push(
+      `- Upcoming reminders: ${reminders
+        .map((item) => `${item.event.title} in ${item.startsInMinutes}m`)
+        .join('; ')}`,
+    )
+  }
+
+  if (risks.length > 0) {
+    lines.push(
+      `- Focus risks before critical events: ${risks
+        .map((risk) => `${risk.event.title} has ${risk.conflictingLowPriority.length} distracting plan(s)`)
+        .join('; ')}`,
+    )
+  }
+
+  lines.push(
+    '- If user asks about schedule, answer with precise event time and suggest one concrete planning action when conflicts/risks exist.',
+  )
+
+  return lines.join('\n')
+}
+
+function buildMissedCheckinContext(missedMoodDays: string[]) {
+  if (missedMoodDays.length === 0) return ''
+  const recentDays = missedMoodDays
+    .slice(0, 2)
+    .map((day) => new Date(`${day}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
+    .join(', ')
+
+  return `CHECK-IN CONTEXT:
+- The user has missing daily mood recap entries for: ${recentDays}.
+- When relevant, gently ask for a short day recap and stress/happiness reflection so their progress graphs stay complete.
+- Keep this nudge concise and supportive (one line).`
 }
 
 async function extractAndStoreConversationSignals({
@@ -342,9 +469,11 @@ async function persistChatTurn({
     })
   }
 
+  const userCreatedAt = new Date()
+  const assistantCreatedAt = new Date(userCreatedAt.getTime() + 1)
   const { error: insertError } = await db.from('chat_messages').insert([
-    { user_id: userId, role: 'user', content: userContent },
-    { user_id: userId, role: 'assistant', content: assistantContent },
+    { user_id: userId, role: 'user', content: userContent, created_at: userCreatedAt.toISOString() },
+    { user_id: userId, role: 'assistant', content: assistantContent, created_at: assistantCreatedAt.toISOString() },
   ])
 
   if (!insertError) {
@@ -378,11 +507,11 @@ async function persistChatTurn({
     ? (modelData.chat_history as Array<Record<string, unknown>>)
     : []
 
-  const now = new Date().toISOString()
+  const now = assistantCreatedAt.toISOString()
   const updatedHistory = [
     ...existingHistory,
-    { role: 'user', content: userContent, created_at: now },
-    { role: 'assistant', content: assistantContent, created_at: now },
+    { role: 'user', content: userContent, created_at: userCreatedAt.toISOString() },
+    { role: 'assistant', content: assistantContent, created_at: assistantCreatedAt.toISOString() },
   ].slice(-100)
 
   const { error: fallbackError } = await db
@@ -432,4 +561,115 @@ async function persistChatMoodSnapshot({
       metadata: { error: error instanceof Error ? error.message : 'unknown' },
     })
   }
+}
+
+async function persistBehaviorPointsSnapshot({
+  supabase,
+  userId,
+  userText,
+  assistantText,
+  upcomingEvents,
+}: PersistBehaviorPointsSnapshotParams) {
+  const entries = inferBehaviorEntries({
+    userText,
+    assistantText,
+    upcomingEvents,
+    userId,
+  })
+  if (entries.length === 0) return
+
+  try {
+    await saveBehaviorEntries(supabase, userId, entries)
+  } catch (error) {
+    logTelemetryEvent({
+      name: 'chat.behavior_snapshot_failed',
+      level: 'warn',
+      userId,
+      metadata: { error: error instanceof Error ? error.message : 'unknown' },
+    })
+  }
+}
+
+async function fetchUpcomingEventsForPrompt({
+  supabase,
+  userId,
+  fallbackModel,
+}: FetchUpcomingEventsParams): Promise<CalendarEvent[]> {
+  let db = supabase
+  try {
+    db = createAdminClient() as unknown as Awaited<ReturnType<typeof createClient>>
+  } catch {
+    // Fall back to scoped client.
+  }
+
+  const nowIso = new Date().toISOString()
+  const { data, error } = await db
+    .from('calendar_events')
+    .select('*')
+    .eq('user_id', userId)
+    .gte('ends_at', nowIso)
+    .order('starts_at', { ascending: true })
+    .limit(8)
+
+  if (!error) {
+    return (data || []).map((event) => normalizeCalendarEvent(event, userId))
+  }
+
+  if (!isMissingTableError(error.message)) {
+    return []
+  }
+
+  const fallbackEvents = getFallbackCalendarEvents(fallbackModel, userId)
+    .filter((event) => event.ends_at >= nowIso)
+    .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
+    .slice(0, 8)
+  return fallbackEvents
+}
+
+function buildRiskCoachingContext({
+  latestUserText,
+  upcomingEvents,
+}: {
+  latestUserText: string
+  upcomingEvents: CalendarEvent[]
+}) {
+  const criticalEvent = upcomingEvents.find((event) => {
+    if (event.tag !== 'super_important' && event.priority !== 'critical') return false
+    const start = new Date(event.starts_at).getTime()
+    const now = Date.now()
+    const hoursAway = (start - now) / (1000 * 60 * 60)
+    return hoursAway >= 0 && hoursAway <= 24
+  })
+
+  if (!criticalEvent) return ''
+
+  const normalizedText = latestUserText.toLowerCase()
+  const riskyKeywords = [
+    'movie',
+    'watch',
+    'party',
+    'hangout',
+    'gaming',
+    'game',
+    'binge',
+    'netflix',
+    'instagram',
+    'reel',
+    'scroll',
+  ]
+  const mentionsRisk = riskyKeywords.some((keyword) => normalizedText.includes(keyword))
+  if (!mentionsRisk) return ''
+
+  const eventTime = new Date(criticalEvent.starts_at).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+
+  return `RISK ALERT CONTEXT:
+- User mentioned a potentially distracting plan right before a critical event.
+- Critical event: ${criticalEvent.title} at ${eventTime}.
+- Start your response with token [[mood:dissatisfied]].
+- Briefly explain concern, remind the event timing, and propose one concrete better next action.`
 }

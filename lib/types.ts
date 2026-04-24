@@ -40,16 +40,27 @@ export interface AIPersonalityModel {
   communication_style?: 'formal' | 'casual' | 'encouraging' | 'direct'
   decision_making?: 'analytical' | 'intuitive' | 'collaborative' | 'decisive'
   speech_rate?: number
+  preferences?: {
+    global_notifications_enabled?: boolean
+  }
   avatar_appearance?: {
     head_color?: string
     body_color?: string
   }
+  calendar_events?: CalendarEvent[]
   mood_tracker_entries?: Array<{
     id: string
-    source: 'checkin' | 'chat'
+    source: 'checkin' | 'chat' | 'backfill'
     reflection: string
     happiness: number
     stress: number
+    created_at: string
+  }>
+  behavior_points_history?: Array<{
+    id: string
+    type: 'study_near_event' | 'prepared_for_event' | 'healthy_break' | 'focused_choice' | 'risky_choice'
+    points: number
+    note: string
     created_at: string
   }>
   goal_coach_plan?: {
@@ -69,6 +80,35 @@ export interface AIPersonalityModel {
     content: string
     created_at: string
   }>
+}
+
+export type CalendarEventTag =
+  | 'casual'
+  | 'important'
+  | 'super_important'
+  | 'health'
+  | 'study'
+  | 'work'
+  | 'social'
+
+export type CalendarEventPriority = 'low' | 'medium' | 'high' | 'critical'
+export type CalendarEventRecurrence = 'none' | 'daily' | 'weekly' | 'monthly'
+
+export interface CalendarEvent {
+  id: string
+  user_id: string
+  title: string
+  starts_at: string
+  ends_at: string
+  tag: CalendarEventTag
+  priority: CalendarEventPriority
+  reminder_minutes: number
+  recurrence: CalendarEventRecurrence
+  location: string | null
+  notes: string | null
+  completed: boolean
+  created_at: string
+  updated_at: string
 }
 
 export interface MemoryLog {

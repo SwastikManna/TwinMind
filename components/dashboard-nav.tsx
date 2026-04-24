@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import {
   Brain,
+  CalendarDays,
   LayoutDashboard,
   MessageSquare,
   Target,
@@ -22,10 +23,13 @@ import { ThemeToggle } from '@/components/theme-toggle'
 
 interface DashboardNavProps {
   user: User
+  profileName?: string
+  profileImageUrl?: string | null
 }
 
 const navItems = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
+  { href: '/dashboard/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/dashboard/chat', label: 'Chat with Twin', icon: MessageSquare },
   { href: '/dashboard/mood', label: 'Mood Tracker', icon: HeartPulse },
   { href: '/dashboard/goals', label: 'Goals', icon: Target },
@@ -33,7 +37,7 @@ const navItems = [
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ]
 
-export function DashboardNav({ user }: DashboardNavProps) {
+export function DashboardNav({ user, profileName, profileImageUrl }: DashboardNavProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -48,16 +52,16 @@ export function DashboardNav({ user }: DashboardNavProps) {
   return (
     <>
       {/* Mobile Header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border shadow-[0_8px_30px_rgb(0_0_0_/_0.16)]">
         <div className="flex items-center justify-between px-4 h-16">
-          <div className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
               <Brain className="w-4 h-4 text-primary" />
             </div>
             <span className="font-bold text-foreground" style={{ fontFamily: 'var(--font-display)' }}>
               TwinMind
             </span>
-          </div>
+          </Link>
           <div className="flex items-center gap-1">
             <ThemeToggle />
             <button
@@ -100,16 +104,16 @@ export function DashboardNav({ user }: DashboardNavProps) {
       </header>
 
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 lg:left-0 lg:w-64 lg:bg-card lg:border-r lg:border-border">
+      <aside className="hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 lg:left-0 lg:w-64 lg:bg-card lg:border-r lg:border-border shadow-[0_10px_34px_rgb(0_0_0_/_0.2)]">
         <div className="flex items-center justify-between px-6 h-16 border-b border-border">
-          <div className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
               <Brain className="w-5 h-5 text-primary" />
             </div>
             <span className="font-bold text-xl text-foreground" style={{ fontFamily: 'var(--font-display)' }}>
               TwinMind
             </span>
-          </div>
+          </Link>
           <ThemeToggle />
         </div>
 
@@ -132,19 +136,27 @@ export function DashboardNav({ user }: DashboardNavProps) {
         </nav>
 
         <div className="p-4 border-t border-border">
-          <div className="flex items-center gap-3 px-4 py-3 mb-2">
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-              <span className="text-sm font-medium text-primary">
-                {user.email?.charAt(0).toUpperCase()}
-              </span>
+          <Link
+            href="/dashboard/settings#account-section"
+            className="group flex items-center gap-3 px-4 py-3 mb-2 rounded-xl hover:bg-muted transition-colors"
+            title="Open account settings"
+          >
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden ring-1 ring-border">
+              {profileImageUrl ? (
+                <img src={profileImageUrl} alt="Profile photo" className="h-full w-full object-cover" />
+              ) : (
+                <span className="text-sm font-medium text-primary">
+                  {(profileName || user.email || 'U').charAt(0).toUpperCase()}
+                </span>
+              )}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">
-                {user.user_metadata?.name || 'User'}
+              <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
+                {profileName || 'User'}
               </p>
               <p className="text-xs text-muted-foreground truncate">Private account</p>
             </div>
-          </div>
+          </Link>
           <button
             onClick={handleSignOut}
             className="flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors w-full"

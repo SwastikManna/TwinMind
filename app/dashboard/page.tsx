@@ -1,9 +1,14 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import { MessageSquare, Target, Lightbulb, TrendingUp, Calendar, ArrowRight, HeartPulse } from 'lucide-react'
+import { MessageSquare, Target, Lightbulb, TrendingUp, Calendar, ArrowRight, HeartPulse, Flame } from 'lucide-react'
 import { AvatarPreview } from '@/components/avatar-preview'
 import { DailyCheckinCard } from '@/components/daily-checkin-card'
+import { MissedDayRecapCard } from '@/components/missed-day-recap-card'
+import { BehaviorReportCard } from '@/components/behavior-report-card'
+import { fetchMoodEntries } from '@/lib/mood-storage'
+import { calculateMoodEntryStreak, calculateMoodGamification, getMissedMoodDays } from '@/lib/mood'
+import { fetchWeeklyBehaviorReport } from '@/lib/behavior-storage'
 import type { TwinProfile, Insight, MemoryLog } from '@/lib/types'
 
 export default async function DashboardPage() {
@@ -111,9 +116,18 @@ export default async function DashboardPage() {
     : false
 
   const hasCheckedInToday = hasCheckedInTodayFromLogs || hasCheckedInTodayFromFallback
+  const moodEntries = await fetchMoodEntries(supabase, user.id)
+  const moodStreak = calculateMoodEntryStreak(moodEntries)
+  const moodGame = calculateMoodGamification(moodEntries)
+  const behaviorReport = await fetchWeeklyBehaviorReport(supabase, user.id)
+  const missedMoodDays = getMissedMoodDays({
+    entries: moodEntries,
+    maxDays: 7,
+    includeToday: false,
+  })
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pt-16 lg:pt-0">
+    <div className="max-w-6xl mx-auto space-y-8 pt-16 lg:pt-0 tm-page-shell">
       {/* Welcome Section */}
       <div className="bg-gradient-to-br from-primary/10 via-accent/5 to-primary/5 rounded-2xl p-6 lg:p-8">
         <div className="flex flex-col lg:flex-row lg:items-center gap-6">
@@ -128,6 +142,12 @@ export default async function DashboardPage() {
           <div className="w-32 h-32 lg:w-40 lg:h-40 flex-shrink-0">
             <AvatarPreview expression="happy" size="md" headColor={twinHeadColor} bodyColor={twinBodyColor} />
           </div>
+        </div>
+        <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2 text-sm text-foreground">
+          <Flame className="h-4 w-4 text-primary" />
+          <span>
+            Current mood streak: <strong>{moodStreak}</strong> day{moodStreak === 1 ? '' : 's'}
+          </span>
         </div>
       </div>
 
@@ -164,9 +184,47 @@ export default async function DashboardPage() {
       </div>
 
       {!hasCheckedInToday && <DailyCheckinCard hasCheckedInToday={hasCheckedInToday} />}
+      {missedMoodDays.length > 0 && <MissedDayRecapCard missingDays={missedMoodDays} />}
+      <BehaviorReportCard report={behaviorReport} />
 
       {/* Stats and Activity */}
       <div className="grid lg:grid-cols-2 gap-6">
+        <div className="bg-card rounded-2xl border border-border p-6">
+          <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+            <Flame className="w-5 h-5 text-primary" />
+            Streak Rewards
+          </h2>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">Level</p>
+              <p className="text-lg font-semibold text-foreground">{moodGame.level}</p>
+            </div>
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">Current streak</p>
+              <p className="text-sm font-medium text-foreground">{moodGame.currentStreak} days</p>
+            </div>
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">Best streak</p>
+              <p className="text-sm font-medium text-foreground">{moodGame.bestStreak} days</p>
+            </div>
+            <div>
+              <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+                <span>XP progress</span>
+                <span>{moodGame.xpIntoLevel}/120</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary"
+                  style={{ width: `${Math.min(100, Math.round((moodGame.xpIntoLevel / 120) * 100))}%` }}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {moodGame.xpToNextLevel} XP to next level.
+            </p>
+          </div>
+        </div>
+
         {/* Twin Profile Summary */}
         <div className="bg-card rounded-2xl border border-border p-6">
           <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">

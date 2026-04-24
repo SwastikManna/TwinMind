@@ -46,7 +46,7 @@ export function AvatarPreview({
   }
 
   const isProfile = mode === 'profile'
-  const avatarOffsetX = isProfile ? 0 : 1.2
+  const avatarOffsetX = isProfile ? 0 : size === 'lg' ? 0.9 : 0.2
   const avatarOffsetY = isProfile ? 0 : -0.4
 
   return (

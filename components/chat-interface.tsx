@@ -54,20 +54,27 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
   const [voiceError, setVoiceError] = useState<string | null>(null)
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
   const [isSpriteCollapsed, setIsSpriteCollapsed] = useState(false)
-  const [conversationReadyToListen, setConversationReadyToListen] = useState(true)
   const [liveUserCaption, setLiveUserCaption] = useState('')
   const [liveAssistantCaption, setLiveAssistantCaption] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const conversationCaptionsEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const speechRecognitionRef = useRef<SpeechRecognitionInstance | null>(null)
+  const conversationDraftRef = useRef('')
   const lastSpokenMessageIdRef = useRef<string | null>(null)
   const shouldKeepListeningRef = useRef(false)
   const deepLinkHandledRef = useRef(false)
   const isConversationModeRef = useRef(false)
 
   const initialUIMessages: UIMessage[] = useMemo(() => {
-    return initialMessages.map((msg, idx) => ({
+    const normalized = [...initialMessages].sort((a, b) => {
+      const delta = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      if (delta !== 0) return delta
+      if (a.role !== b.role) return a.role === 'user' ? -1 : 1
+      return String(a.id).localeCompare(String(b.id))
+    })
+
+    return normalized.map((msg, idx) => ({
       id: msg.id || `initial-${idx}`,
       role: msg.role as 'user' | 'assistant',
       parts: [{ type: 'text' as const, text: msg.content }],
@@ -195,18 +202,11 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
       const interimText = interimTranscript.trim()
 
       if (isConversationModeRef.current) {
-        if (interimText) {
-          setLiveUserCaption(interimText)
-        }
-
         if (finalText) {
-          shouldKeepListeningRef.current = false
-          recognition.stop()
-          setIsListening(false)
-          setLiveUserCaption(finalText)
-          setInput('')
-          sendMessage({ text: finalText })
+          conversationDraftRef.current = `${conversationDraftRef.current} ${finalText}`.trim()
         }
+        const caption = `${conversationDraftRef.current} ${interimText}`.trim()
+        setLiveUserCaption(caption)
         return
       }
 
@@ -260,6 +260,15 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
     )
   }
 
+  function stripMoodMarkers(text: string) {
+    return text.replace(/\[\[mood:[a-z_]+\]\]/gi, '').trim()
+  }
+
+  function getMoodMarker(text: string) {
+    const match = text.match(/\[\[mood:([a-z_]+)\]\]/i)
+    return match?.[1]?.toLowerCase() || null
+  }
+
   function getPreferredVoice() {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       return null
@@ -292,6 +301,18 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
     setSpeakingMessageId(null)
   }
 
+  async function waitForVoices(maxWaitMs = 1200) {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
+    const synth = window.speechSynthesis
+    const startedAt = Date.now()
+
+    while (Date.now() - startedAt < maxWaitMs) {
+      const voices = synth.getVoices()
+      if (voices.length > 0) return
+      await new Promise((resolve) => window.setTimeout(resolve, 80))
+    }
+  }
+
   function startListeningSession() {
     const recognition = speechRecognitionRef.current
     if (!recognition) {
@@ -300,6 +321,10 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
     }
 
     try {
+      if (isConversationModeRef.current) {
+        conversationDraftRef.current = ''
+        setLiveUserCaption('')
+      }
       recognition.start()
       shouldKeepListeningRef.current = true
       setIsListening(true)
@@ -318,7 +343,7 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
     setIsListening(false)
   }
 
-  function speakMessageText(
+  async function speakMessageText(
     text: string,
     messageId: string,
     source: 'auto' | 'manual' = 'auto',
@@ -329,10 +354,14 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
       return
     }
 
-    const trimmedText = text.trim()
+    const trimmedText = stripMoodMarkers(text.trim())
     if (!trimmedText) {
       return
     }
+
+    // Some browsers (especially on first use) populate voices lazily.
+    // Wait briefly so the first utterance uses the selected persona voice.
+    await waitForVoices()
 
     const utterance = new SpeechSynthesisUtterance(trimmedText)
     utterance.rate = twinSpeechRate
@@ -394,18 +423,6 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
 
   useEffect(() => {
     if (!isConversationMode) return
-    if (!conversationReadyToListen) return
-    if (isLoading || isSpeaking || isListening) return
-
-    const timer = window.setTimeout(() => {
-      startListeningSession()
-    }, 450)
-
-    return () => window.clearTimeout(timer)
-  }, [isConversationMode, conversationReadyToListen, isLoading, isSpeaking, isListening])
-
-  useEffect(() => {
-    if (!isConversationMode) return
     if (isLoading) {
       setLiveAssistantCaption('Thinking...')
     }
@@ -449,6 +466,29 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
     startListeningSession()
   }
 
+  function finalizeConversationInput() {
+    const recognition = speechRecognitionRef.current
+    if (!recognition) {
+      setVoiceError('Voice input is not supported in this browser.')
+      return
+    }
+
+    if (isListening) {
+      const text = liveUserCaption.trim()
+      stopListeningSession()
+      if (text) {
+        conversationDraftRef.current = ''
+        setInput('')
+        sendMessage({ text })
+      }
+      return
+    }
+
+    if (!isLoading) {
+      startListeningSession()
+    }
+  }
+
   function handleMessageSpeechToggle(message: UIMessage) {
     const messageText = extractMessageText(message)
     if (!messageText) {
@@ -470,7 +510,7 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
         setIsVoiceEnabled(true)
         setVoiceError(null)
         setLiveUserCaption('')
-        setConversationReadyToListen(false)
+        conversationDraftRef.current = ''
         const welcomeText = 'Hey, what do you wanna talk about?'
         setLiveAssistantCaption(welcomeText)
 
@@ -480,15 +520,10 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
           lastSpokenMessageIdRef.current = latestAssistant.id
         }
 
-        speakMessageText(welcomeText, '__conversation-welcome__', 'manual', () => {
-          if (isConversationModeRef.current) {
-            setConversationReadyToListen(true)
-            startListeningSession()
-          }
-        })
+        speakMessageText(welcomeText, '__conversation-welcome__', 'manual')
       } else {
         stopListeningSession()
-        setConversationReadyToListen(true)
+        conversationDraftRef.current = ''
         setLiveUserCaption('')
         setLiveAssistantCaption('')
       }
@@ -496,11 +531,21 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
     })
   }
 
-  const latestUserText = useMemo(() => {
+  const latestUserTextRaw = useMemo(() => {
     const lastUser = [...messages].reverse().find((message) => message.role === 'user')
     if (!lastUser) return ''
-    return extractMessageText(lastUser).toLowerCase()
+    return extractMessageText(lastUser)
   }, [messages])
+
+  const latestAssistantTextRaw = useMemo(() => {
+    const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant')
+    return lastAssistant ? extractMessageText(lastAssistant) : ''
+  }, [messages])
+
+  const latestUserText = useMemo(() => latestUserTextRaw.toLowerCase(), [latestUserTextRaw])
+  const latestAssistantText = useMemo(() => latestAssistantTextRaw.toLowerCase(), [latestAssistantTextRaw])
+
+  const latestAssistantMoodMarker = useMemo(() => getMoodMarker(latestAssistantText), [latestAssistantText])
 
   const twinAvatarColors = useMemo(() => {
     const appearance = twinProfile.ai_personality_model?.avatar_appearance
@@ -522,10 +567,37 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
   const avatarExpression = useMemo(() => {
     if (error || voiceError) return 'shocked'
     if (isLoading) return 'thinking'
-    if (isSpeaking || isListening) return 'talking'
+    if (isSpeaking) return 'talking'
+    if (isListening) return 'neutral'
 
-    const angryKeywords = ['angry', 'mad', 'annoyed', 'furious', 'hate', 'irritated']
-    if (angryKeywords.some((keyword) => latestUserText.includes(keyword))) {
+    const combinedContext = `${latestUserText} ${latestAssistantText}`
+    const supportiveHealthContext =
+      /father|mother|dad|mom|family|operation|surgery|hospital|recovery|recover|injury|health|pain/.test(
+        combinedContext,
+      )
+    const reassuranceContext =
+      /be okay|will be okay|be fine|will be fine|recover|recovery|stay strong|optimistic|positive|hopeful/.test(
+        combinedContext,
+      )
+    const riskyChoiceContext =
+      /watch(ing)?\s+a?\s*movie|netflix|reels|instagram|youtube|gaming|game|party|procrastinat|skip|later/.test(
+        latestUserText,
+      )
+
+    const userWantsHappy =
+      /(?:be|stay|look|act)\s+happy/.test(latestUserText) ||
+      /(?:be|stay)\s+calm/.test(latestUserText) ||
+      /smile|cheer up/.test(latestUserText) ||
+      /don't be angry|dont be angry|don't be sad|dont be sad/.test(latestUserText)
+    if (userWantsHappy) return 'happy'
+
+    if (supportiveHealthContext && reassuranceContext) return 'happy'
+    if (supportiveHealthContext) return 'sad'
+
+    if (latestAssistantMoodMarker === 'dissatisfied' && riskyChoiceContext) return 'angry'
+
+    const assistantAngryKeywords = ['angry', 'mad', 'annoyed', 'furious', 'hate', 'irritated']
+    if (assistantAngryKeywords.some((keyword) => latestAssistantText.includes(keyword))) {
       return 'angry'
     }
 
@@ -540,19 +612,91 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
     }
 
     return 'happy'
-  }, [error, voiceError, isLoading, isSpeaking, isVoiceEnabled, isListening, latestUserText])
+  }, [
+    error,
+    voiceError,
+    isLoading,
+    isSpeaking,
+    isVoiceEnabled,
+    isListening,
+    latestUserText,
+    latestAssistantText,
+    latestAssistantMoodMarker,
+  ])
+
+  const emotionMeta = useMemo(() => {
+    if (avatarExpression === 'thinking') {
+      return { emotion: 'Thinking', intensity: 'Moderate', note: 'Processing your context' }
+    }
+    if (avatarExpression === 'talking' || avatarExpression === 'speaking') {
+      return { emotion: 'Speaking', intensity: 'Moderate', note: 'Responding in voice mode' }
+    }
+    if (avatarExpression === 'angry') {
+      if (latestAssistantMoodMarker === 'dissatisfied') {
+        return {
+          emotion: 'Disappointed',
+          intensity: inferEmotionIntensity({
+            expression: 'angry',
+            userText: latestUserTextRaw,
+            assistantText: latestAssistantTextRaw,
+            assistantMoodMarker: latestAssistantMoodMarker,
+          }),
+          note: 'Pushing for better choices',
+        }
+      }
+      return {
+        emotion: 'Angry',
+        intensity: inferEmotionIntensity({
+          expression: 'angry',
+          userText: latestUserTextRaw,
+          assistantText: latestAssistantTextRaw,
+          assistantMoodMarker: latestAssistantMoodMarker,
+        }),
+        note: 'Strong emotional response detected',
+      }
+    }
+    if (avatarExpression === 'sad') {
+      return {
+        emotion: 'Sad',
+        intensity: inferEmotionIntensity({
+          expression: 'sad',
+          userText: latestUserTextRaw,
+          assistantText: latestAssistantTextRaw,
+        }),
+        note: 'Listening with empathy',
+      }
+    }
+    if (avatarExpression === 'shocked') {
+      return {
+        emotion: 'Surprised',
+        intensity: inferEmotionIntensity({
+          expression: 'shocked',
+          userText: latestUserTextRaw,
+          assistantText: latestAssistantTextRaw,
+        }),
+        note: 'Unexpected moment detected',
+      }
+    }
+    if (avatarExpression === 'happy') {
+      return {
+        emotion: 'Happy',
+        intensity: inferEmotionIntensity({
+          expression: 'happy',
+          userText: latestUserTextRaw,
+          assistantText: latestAssistantTextRaw,
+        }),
+        note: 'Ready to chat',
+      }
+    }
+    return { emotion: 'Happy', intensity: 'Mild', note: 'Ready to chat' }
+  }, [avatarExpression, latestAssistantMoodMarker, latestAssistantTextRaw, latestUserTextRaw])
 
   const spriteStatusLabel = useMemo(() => {
-    if (avatarExpression === 'thinking') return 'Thinking about your response'
-    if (avatarExpression === 'talking' || avatarExpression === 'speaking') return 'Voice mode active'
-    if (avatarExpression === 'angry') return 'High intensity emotion detected'
-    if (avatarExpression === 'sad') return 'Listening with empathy'
-    if (avatarExpression === 'shocked') return 'Alert state'
-    return 'Ready to chat'
-  }, [avatarExpression])
+    return `${emotionMeta.emotion} - ${emotionMeta.intensity}`
+  }, [emotionMeta])
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="chat-pattern-bg flex h-full flex-col">
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card">
         <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 ring-1 ring-primary/15">
           <AvatarPreview
@@ -620,7 +764,10 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
                 </div>
                 <div className="mt-4 text-center">
                   <h3 className="text-lg font-semibold text-foreground">{twinProfile.name}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">{spriteStatusLabel}</p>
+                  <p className="mt-1 inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                    {spriteStatusLabel}
+                  </p>
+                  <p className="mt-2 text-sm text-muted-foreground">{emotionMeta.note}</p>
                 </div>
               </div>
             </section>
@@ -682,16 +829,16 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
             <div className="flex items-center justify-between gap-3">
               <button
                 type="button"
-                onClick={toggleListening}
+                onClick={finalizeConversationInput}
                 className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl transition-colors ${
                   isListening
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-foreground hover:bg-muted/80'
                 }`}
-                title={isListening ? 'Stop listening' : 'Start listening'}
+                title={isListening ? 'Stop mic and send your message' : 'Start listening'}
               >
                 {isListening ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
-                {isListening ? 'Listening' : 'Start Mic'}
+                {isListening ? 'Stop & Send' : 'Start Mic'}
               </button>
 
               <button
@@ -842,6 +989,60 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
   )
 }
 
+type EmotionExpression = 'happy' | 'sad' | 'angry' | 'shocked'
+type EmotionIntensity = 'Mild' | 'Moderate' | 'High'
+
+function inferEmotionIntensity({
+  expression,
+  userText,
+  assistantText,
+  assistantMoodMarker,
+}: {
+  expression: EmotionExpression
+  userText: string
+  assistantText: string
+  assistantMoodMarker?: string | null
+}): EmotionIntensity {
+  const user = userText.toLowerCase()
+  const assistant = assistantText.toLowerCase()
+  const combined = `${user} ${assistant}`
+  let score = 0
+
+  if (/(.)\1{2,}/.test(userText) || /(.)\1{2,}/.test(assistantText)) score += 1
+  if ((userText.match(/!/g)?.length || 0) >= 2 || (assistantText.match(/!/g)?.length || 0) >= 2) score += 1
+  if (/\b[A-Z]{4,}\b/.test(userText) || /\b[A-Z]{4,}\b/.test(assistantText)) score += 1
+  if (/\b(very|really|so|super|extremely|insanely|hugely)\b/.test(combined)) score += 1
+
+  if (expression === 'happy') {
+    if (/\b(won|winner|victory|achieved|selected|ranked|promotion|topper|olympiad|hackathon|medal|congratulations)\b/.test(combined)) score += 3
+    if (/\b(happy|excited|thrilled|grateful|proud|amazing|awesome|fantastic|celebrate)\b/.test(combined)) score += 2
+    if (score >= 5) return 'High'
+    if (score >= 3) return 'Moderate'
+    return 'Mild'
+  }
+
+  if (expression === 'sad') {
+    if (/\b(devastated|heartbroken|depressed|crying|hopeless|burnt out|burned out)\b/.test(combined)) score += 3
+    if (/\b(sad|down|low|stressed|anxious|upset|tired)\b/.test(combined)) score += 2
+    if (score >= 5) return 'High'
+    if (score >= 3) return 'Moderate'
+    return 'Mild'
+  }
+
+  if (expression === 'angry') {
+    if (assistantMoodMarker === 'dissatisfied') score += 2
+    if (/\b(angry|furious|mad|annoyed|irritated|frustrated|unacceptable)\b/.test(combined)) score += 2
+    if (score >= 5) return 'High'
+    if (score >= 3) return 'Moderate'
+    return 'Mild'
+  }
+
+  if (/\b(shocked|surprised|omg|what|no way|unexpected)\b/.test(combined)) score += 2
+  if (score >= 5) return 'High'
+  if (score >= 3) return 'Moderate'
+  return 'Mild'
+}
+
 function SpriteDock({
   collapsed,
   onToggleCollapse,
@@ -888,9 +1089,11 @@ function SpriteDock({
         </motion.div>
 
         {!collapsed && (
-          <div className="w-full rounded-2xl border border-border bg-background/70 p-3 text-center">
+        <div className="w-full rounded-2xl border border-border bg-background/70 p-3 text-center">
             <p className="text-sm font-semibold text-foreground">{twinName}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{statusLabel}</p>
+            <p className="mt-1 inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
+              {statusLabel}
+            </p>
           </div>
         )}
       </div>
@@ -916,7 +1119,9 @@ function MessageBubble({
   const textContent = message.parts
     ?.filter((p): p is { type: 'text'; text: string } => p.type === 'text')
     .map((p) => p.text)
-    .join('') || ''
+    .join('')
+    .replace(/\[\[mood:[a-z_]+\]\]/gi, '')
+    .trim() || ''
 
   return (
     <motion.div

@@ -1,7 +1,7 @@
 export interface MoodEntry {
   id: string
   user_id: string
-  source: 'checkin' | 'chat'
+  source: 'checkin' | 'chat' | 'backfill'
   reflection: string
   happiness: number
   stress: number
@@ -13,7 +13,7 @@ export function normalizeMoodEntry(input: Partial<MoodEntry> & { user_id: string
   return {
     id: input.id || `mood-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     user_id: input.user_id,
-    source: input.source === 'chat' ? 'chat' : 'checkin',
+    source: input.source === 'chat' ? 'chat' : input.source === 'backfill' ? 'backfill' : 'checkin',
     reflection: String(input.reflection || '').trim(),
     happiness: clampScore(input.happiness),
     stress: clampScore(input.stress),
@@ -33,7 +33,7 @@ export function parseMoodEntriesFromModel(model: unknown, userId: string): MoodE
       return normalizeMoodEntry({
         id: typeof row.id === 'string' ? row.id : undefined,
         user_id: userId,
-        source: row.source === 'chat' ? 'chat' : 'checkin',
+        source: row.source === 'chat' ? 'chat' : row.source === 'backfill' ? 'backfill' : 'checkin',
         reflection: String(row.reflection || ''),
         happiness: Number(row.happiness ?? 50),
         stress: Number(row.stress ?? 50),
@@ -53,7 +53,7 @@ export function parseMoodEntryFromMemoryLogContent(content: string, userId: stri
     return normalizeMoodEntry({
       id: parsed.id,
       user_id: userId,
-      source: parsed.source === 'chat' ? 'chat' : 'checkin',
+      source: parsed.source === 'chat' ? 'chat' : parsed.source === 'backfill' ? 'backfill' : 'checkin',
       reflection: parsed.reflection || '',
       happiness: Number(parsed.happiness ?? 50),
       stress: Number(parsed.stress ?? 50),
@@ -154,6 +154,173 @@ export function calculateMoodAnalytics(entries: MoodEntry[]) {
       ? { date: toughestDayRow.date, happiness: toughestDayRow.happiness, stress: toughestDayRow.stress }
       : null,
   }
+}
+
+export function toDayKey(isoLike: string) {
+  return isoLike.slice(0, 10)
+}
+
+export function getDaysWithMoodEntries(entries: MoodEntry[]) {
+  return new Set(entries.map((entry) => toDayKey(entry.created_at)))
+}
+
+export function getMissedMoodDays({
+  entries,
+  maxDays = 7,
+  includeToday = false,
+}: {
+  entries: MoodEntry[]
+  maxDays?: number
+  includeToday?: boolean
+}) {
+  const daySet = getDaysWithMoodEntries(entries)
+  const now = new Date()
+  const result: string[] = []
+
+  const startOffset = includeToday ? 0 : 1
+  for (let offset = startOffset; offset <= maxDays; offset += 1) {
+    const day = new Date(now)
+    day.setHours(12, 0, 0, 0)
+    day.setDate(day.getDate() - offset)
+    const isoDay = day.toISOString().slice(0, 10)
+    if (!daySet.has(isoDay)) {
+      result.push(isoDay)
+    }
+  }
+
+  return result.sort((a, b) => b.localeCompare(a))
+}
+
+export function calculateMoodEntryStreak(entries: MoodEntry[]) {
+  const dayKeys = Array.from(getDaysWithMoodEntries(entries)).sort((a, b) => b.localeCompare(a))
+  if (dayKeys.length === 0) return 0
+
+  const now = new Date()
+  now.setHours(12, 0, 0, 0)
+  const todayKey = now.toISOString().slice(0, 10)
+
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  const yesterdayKey = yesterday.toISOString().slice(0, 10)
+
+  const startsToday = dayKeys[0] === todayKey
+  const startsYesterday = dayKeys[0] === yesterdayKey
+  if (!startsToday && !startsYesterday) {
+    return 0
+  }
+
+  let streak = 1
+  for (let i = 1; i < dayKeys.length; i += 1) {
+    const prev = new Date(dayKeys[i - 1])
+    const current = new Date(dayKeys[i])
+    const diff = Math.round((prev.getTime() - current.getTime()) / 86400000)
+    if (diff === 1) {
+      streak += 1
+    } else {
+      break
+    }
+  }
+
+  return streak
+}
+
+export interface MoodBadge {
+  id: string
+  label: string
+  description: string
+  unlocked: boolean
+}
+
+export interface MoodGamificationProfile {
+  level: number
+  xp: number
+  xpIntoLevel: number
+  xpToNextLevel: number
+  currentStreak: number
+  bestStreak: number
+  totalCheckins: number
+  badges: MoodBadge[]
+}
+
+export function calculateMoodGamification(entries: MoodEntry[]): MoodGamificationProfile {
+  const daysWithEntries = Array.from(getDaysWithMoodEntries(entries)).sort((a, b) => b.localeCompare(a))
+  const totalCheckins = entries.filter((entry) => entry.source !== 'chat').length
+  const currentStreak = calculateMoodEntryStreak(entries)
+  const bestStreak = calculateBestMoodStreak(daysWithEntries)
+  const weeklyConsistency = calculateWeeklyConsistency(daysWithEntries)
+
+  const xp = totalCheckins * 12 + currentStreak * 18 + bestStreak * 8 + Math.round(weeklyConsistency * 40)
+  const level = Math.max(1, Math.floor(xp / 120) + 1)
+  const levelStartXp = (level - 1) * 120
+  const nextLevelXp = level * 120
+
+  const badges: MoodBadge[] = [
+    {
+      id: 'first-checkin',
+      label: 'First Step',
+      description: 'Logged your first daily check-in.',
+      unlocked: totalCheckins >= 1,
+    },
+    {
+      id: 'streak-3',
+      label: 'On Fire',
+      description: 'Reached a 3-day mood streak.',
+      unlocked: bestStreak >= 3,
+    },
+    {
+      id: 'streak-7',
+      label: 'Weekly Warrior',
+      description: 'Reached a 7-day streak.',
+      unlocked: bestStreak >= 7,
+    },
+    {
+      id: 'streak-21',
+      label: 'Unbreakable',
+      description: 'Reached a 21-day streak.',
+      unlocked: bestStreak >= 21,
+    },
+    {
+      id: 'consistency-80',
+      label: 'Consistent Mind',
+      description: 'Maintained 80% weekly consistency.',
+      unlocked: weeklyConsistency >= 0.8,
+    },
+  ]
+
+  return {
+    level,
+    xp,
+    xpIntoLevel: xp - levelStartXp,
+    xpToNextLevel: Math.max(0, nextLevelXp - xp),
+    currentStreak,
+    bestStreak,
+    totalCheckins,
+    badges,
+  }
+}
+
+function calculateBestMoodStreak(dayKeysDesc: string[]) {
+  if (dayKeysDesc.length === 0) return 0
+  let best = 1
+  let current = 1
+  for (let i = 1; i < dayKeysDesc.length; i += 1) {
+    const prev = new Date(dayKeysDesc[i - 1])
+    const currentDay = new Date(dayKeysDesc[i])
+    const diff = Math.round((prev.getTime() - currentDay.getTime()) / 86400000)
+    if (diff === 1) {
+      current += 1
+      best = Math.max(best, current)
+    } else {
+      current = 1
+    }
+  }
+  return best
+}
+
+function calculateWeeklyConsistency(dayKeysDesc: string[]) {
+  if (dayKeysDesc.length === 0) return 0
+  const recent = new Set(dayKeysDesc.slice(0, 7))
+  return recent.size / 7
 }
 
 function countMatches(text: string, words: string[]) {

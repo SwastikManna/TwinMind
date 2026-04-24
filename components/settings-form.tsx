@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Brain, Check, LogOut, Save, Settings, Upload, User, Volume2, X } from 'lucide-react'
+import { BellRing, Brain, Check, LogOut, Save, Settings, Upload, User, Volume2, X } from 'lucide-react'
 import type { Profile, TwinProfile } from '@/lib/types'
 
 interface SettingsFormProps {
@@ -74,6 +74,8 @@ export function SettingsForm({ profile, twinProfile, userEmail }: SettingsFormPr
         typeof twinProfile.ai_personality_model?.speech_rate === 'number'
           ? String(clampSpeechRate(twinProfile.ai_personality_model.speech_rate))
           : '1',
+      notificationsEnabled:
+        twinProfile.ai_personality_model?.preferences?.global_notifications_enabled !== false,
       headColor: twinProfile.ai_personality_model?.avatar_appearance?.head_color || '#0d9488',
       bodyColor: twinProfile.ai_personality_model?.avatar_appearance?.body_color || '#0f766e',
       goalsText: (twinProfile.goals || []).join('\n'),
@@ -86,6 +88,7 @@ export function SettingsForm({ profile, twinProfile, userEmail }: SettingsFormPr
       twinProfile.ai_personality_model?.communication_style,
       twinProfile.ai_personality_model?.decision_making,
       twinProfile.ai_personality_model?.speech_rate,
+      twinProfile.ai_personality_model?.preferences?.global_notifications_enabled,
       twinProfile.ai_personality_model?.avatar_appearance?.head_color,
       twinProfile.ai_personality_model?.avatar_appearance?.body_color,
       twinProfile.goals,
@@ -180,6 +183,10 @@ export function SettingsForm({ profile, twinProfile, userEmail }: SettingsFormPr
           communication_style: twinData.communicationStyle,
           decision_making: twinData.decisionMakingStyle,
           speech_rate: speechRate,
+          preferences: {
+            ...(twinProfile.ai_personality_model?.preferences || {}),
+            global_notifications_enabled: Boolean(twinData.notificationsEnabled),
+          },
           avatar_appearance: {
             ...(twinProfile.ai_personality_model?.avatar_appearance || {}),
             head_color: headColor,
@@ -355,7 +362,7 @@ export function SettingsForm({ profile, twinProfile, userEmail }: SettingsFormPr
         </p>
       </div>
 
-      <section className="bg-card rounded-2xl border border-border p-6 space-y-6">
+      <section id="account-section" className="bg-card rounded-2xl border border-border p-6 space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-semibold text-foreground flex items-center gap-2">
             <User className="w-5 h-5 text-primary" />
@@ -538,6 +545,38 @@ export function SettingsForm({ profile, twinProfile, userEmail }: SettingsFormPr
           </div>
         </Field>
 
+        <div className="rounded-2xl border border-border bg-background/35 p-4">
+          <h3 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+            <BellRing className="w-4 h-4 text-primary" />
+            Preferences
+          </h3>
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card/70 px-3 py-2">
+            <div>
+              <p className="text-sm font-medium text-foreground">Global AI Reminders</p>
+              <p className="text-xs text-muted-foreground">
+                Show top-right reminders for tomorrow&apos;s events and late-night rest prompts.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={Boolean(twinData.notificationsEnabled)}
+              onClick={() =>
+                setTwinData((current) => ({ ...current, notificationsEnabled: !current.notificationsEnabled }))
+              }
+              className={`relative h-7 w-12 rounded-full border transition-colors ${
+                twinData.notificationsEnabled ? 'border-primary/60 bg-primary/25' : 'border-border bg-muted'
+              }`}
+            >
+              <span
+                className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${
+                  twinData.notificationsEnabled ? 'left-6' : 'left-1'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
         <div className="grid md:grid-cols-2 gap-4">
           <Field label="Communication Style">
             <select
@@ -662,7 +701,7 @@ export function SettingsForm({ profile, twinProfile, userEmail }: SettingsFormPr
           <button
             onClick={handleSignOut}
             disabled={isSigningOut || isRunningDangerAction}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors disabled:opacity-50"
           >
             <LogOut className="w-4 h-4" />
             {isSigningOut ? 'Signing out...' : 'Sign Out'}
@@ -670,14 +709,14 @@ export function SettingsForm({ profile, twinProfile, userEmail }: SettingsFormPr
           <button
             onClick={() => runAccountAction('clear_history')}
             disabled={isSigningOut || isRunningDangerAction}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors disabled:opacity-50"
           >
             Clear Chats History
           </button>
           <button
             onClick={() => runAccountAction('reset_personalization')}
             disabled={isSigningOut || isRunningDangerAction}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors disabled:opacity-50"
           >
             Reset Twin Personalization
           </button>

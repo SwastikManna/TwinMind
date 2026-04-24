@@ -4,9 +4,11 @@ import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Area, AreaChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
-import { Heart, Loader2, ShieldAlert, Smile, Activity, Trophy, TrendingDown, Flame } from 'lucide-react'
+import { Heart, Loader2, ShieldAlert, Smile, Activity, Trophy, TrendingDown, Flame, Award, Sparkles } from 'lucide-react'
 import {
   aggregateMoodByDay,
+  calculateMoodEntryStreak,
+  calculateMoodGamification,
   calculateMoodAnalytics,
   filterMoodEntriesByWindow,
   MoodEntry,
@@ -29,7 +31,8 @@ export function MoodTracker({ entries }: MoodTrackerProps) {
   const windowEntries = useMemo(() => filterMoodEntriesByWindow(entries, window), [entries, window])
   const daily = useMemo(() => aggregateMoodByDay(windowEntries), [windowEntries])
   const analytics = useMemo(() => calculateMoodAnalytics(windowEntries), [windowEntries])
-  const streak = useMemo(() => calculateMoodStreak(entries), [entries])
+  const streak = useMemo(() => calculateMoodEntryStreak(entries), [entries])
+  const gamification = useMemo(() => calculateMoodGamification(entries), [entries])
   const stressSpike = useMemo(() => {
     if (daily.length < 4) return null
     const latest = daily[daily.length - 1]
@@ -196,6 +199,71 @@ export function MoodTracker({ entries }: MoodTrackerProps) {
         </div>
       </div>
 
+      <div className="bg-card rounded-2xl border border-border p-5 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="font-semibold text-foreground inline-flex items-center gap-2">
+            <Award className="h-5 w-5 text-primary" />
+            Streak Rewards
+          </p>
+          <span className="rounded-full bg-primary/10 px-3 py-1 text-sm text-primary">
+            Level {gamification.level}
+          </span>
+        </div>
+
+        <div>
+          <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+            <span>XP Progress</span>
+            <span>{gamification.xpIntoLevel} / 120</span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary transition-all"
+              style={{ width: `${Math.min(100, Math.round((gamification.xpIntoLevel / 120) * 100))}%` }}
+            />
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {gamification.xpToNextLevel} XP to Level {gamification.level + 1}
+          </p>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-xl border border-border/80 bg-background/70 p-3">
+            <p className="text-xs text-muted-foreground">Best streak</p>
+            <p className="mt-1 text-lg font-semibold text-foreground">{gamification.bestStreak} days</p>
+          </div>
+          <div className="rounded-xl border border-border/80 bg-background/70 p-3">
+            <p className="text-xs text-muted-foreground">Current streak</p>
+            <p className="mt-1 text-lg font-semibold text-foreground">{gamification.currentStreak} days</p>
+          </div>
+          <div className="rounded-xl border border-border/80 bg-background/70 p-3">
+            <p className="text-xs text-muted-foreground">Total check-ins</p>
+            <p className="mt-1 text-lg font-semibold text-foreground">{gamification.totalCheckins}</p>
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 text-sm font-medium text-foreground inline-flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-accent" />
+            Badges
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {gamification.badges.map((badge) => (
+              <span
+                key={badge.id}
+                title={badge.description}
+                className={`rounded-full px-3 py-1 text-xs border ${
+                  badge.unlocked
+                    ? 'bg-primary/12 border-primary/35 text-primary'
+                    : 'bg-muted/40 border-border text-muted-foreground'
+                }`}
+              >
+                {badge.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {stressSpike && (
         <div className="rounded-2xl border border-chart-3/30 bg-chart-3/10 p-4">
           <p className="text-sm font-medium text-foreground">
@@ -271,24 +339,4 @@ export function MoodTracker({ entries }: MoodTrackerProps) {
 function shortDate(value: string) {
   const date = new Date(value)
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-}
-
-function calculateMoodStreak(entries: MoodEntry[]) {
-  const days = Array.from(new Set(entries.map((entry) => entry.created_at.slice(0, 10)))).sort((a, b) =>
-    b.localeCompare(a),
-  )
-  if (days.length === 0) return 0
-
-  let streak = 1
-  for (let i = 1; i < days.length; i += 1) {
-    const prev = new Date(days[i - 1])
-    const current = new Date(days[i])
-    const diff = Math.round((prev.getTime() - current.getTime()) / 86400000)
-    if (diff === 1) {
-      streak += 1
-    } else {
-      break
-    }
-  }
-  return streak
 }

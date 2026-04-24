@@ -6,7 +6,8 @@ const MoodTrackSchema = z.object({
   reflection: z.string().min(3).max(400),
   happiness: z.number().int().min(0).max(100),
   stress: z.number().int().min(0).max(100),
-  source: z.enum(['checkin', 'chat']).default('checkin'),
+  source: z.enum(['checkin', 'chat', 'backfill']).default('checkin'),
+  entry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 })
 
 export async function POST(req: Request) {
@@ -38,6 +39,7 @@ export async function POST(req: Request) {
       happiness: parsed.data.happiness,
       stress: parsed.data.stress,
       source: parsed.data.source,
+      created_at: parsed.data.entry_date ? `${parsed.data.entry_date}T12:00:00.000Z` : undefined,
     })
     return Response.json({ entry })
   } catch (error) {

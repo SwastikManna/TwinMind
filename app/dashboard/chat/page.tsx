@@ -39,8 +39,7 @@ export default async function ChatPage() {
     .order('created_at', { ascending: false })
     .limit(20) as { data: ChatMessage[] | null }
 
-  // Reverse to get chronological order.
-  let messages = recentMessages?.reverse() || []
+  let messages = normalizeMessageOrder(recentMessages || [])
 
   // Fallback: read from twin profile JSON when chat_messages table is unavailable.
   if ((recentMessagesError || messages.length === 0) && twinProfile.ai_personality_model) {
@@ -69,4 +68,19 @@ export default async function ChatPage() {
       />
     </div>
   )
+}
+
+function normalizeMessageOrder(messages: ChatMessage[]) {
+  return [...messages].sort((a, b) => {
+    const timeDelta = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    if (timeDelta !== 0) return timeDelta
+
+    // If two rows have identical timestamps, enforce user before assistant.
+    if (a.role !== b.role) {
+      if (a.role === 'user') return -1
+      if (b.role === 'user') return 1
+    }
+
+    return String(a.id).localeCompare(String(b.id))
+  })
 }
