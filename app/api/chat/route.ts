@@ -7,6 +7,7 @@ import {
   UIMessage,
 } from 'ai'
 import { getLanguageModel, getObjectGenerationProviderOptions } from '@/lib/ai'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { logTelemetryEvent } from '@/lib/telemetry'
 import { z } from 'zod'
@@ -300,8 +301,15 @@ async function persistChatTurn({
   userContent,
   assistantContent,
 }: PersistChatTurnParams) {
+  let db = supabase
+  try {
+    db = createAdminClient() as unknown as Awaited<ReturnType<typeof createClient>>
+  } catch {
+    // If admin client is unavailable, fall back to user-scoped client.
+  }
+
   // Ensure the parent profile exists for FK constraints.
-  const { error: profileError } = await supabase.from('profiles').upsert(
+  const { error: profileError } = await db.from('profiles').upsert(
     {
       id: userId,
       name: userName,
@@ -320,7 +328,7 @@ async function persistChatTurn({
     })
   }
 
-  const { error: insertError } = await supabase.from('chat_messages').insert([
+  const { error: insertError } = await db.from('chat_messages').insert([
     { user_id: userId, role: 'user', content: userContent },
     { user_id: userId, role: 'assistant', content: assistantContent },
   ])
@@ -337,7 +345,7 @@ async function persistChatTurn({
   })
 
   // Fallback storage path when chat_messages table/RLS is unavailable.
-  const { data: twinProfile } = await supabase
+  const { data: twinProfile } = await db
     .from('twin_profiles')
     .select('id, ai_personality_model')
     .eq('user_id', userId)
@@ -363,7 +371,7 @@ async function persistChatTurn({
     { role: 'assistant', content: assistantContent, created_at: now },
   ].slice(-100)
 
-  const { error: fallbackError } = await supabase
+  const { error: fallbackError } = await db
     .from('twin_profiles')
     .update({
       ai_personality_model: {

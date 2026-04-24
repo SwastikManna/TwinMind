@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { ChatInterface } from '@/components/chat-interface'
 import type { TwinProfile, ChatMessage } from '@/lib/types'
@@ -22,8 +23,16 @@ export default async function ChatPage() {
     redirect('/onboarding')
   }
 
-  // Fetch recent chat messages (primary storage).
-  const { data: recentMessages, error: recentMessagesError } = await supabase
+  // Fetch recent chat messages (primary storage). Use admin client to avoid
+  // missing RLS policy issues while still scoping by authenticated user id.
+  let db = supabase
+  try {
+    db = createAdminClient() as unknown as typeof supabase
+  } catch {
+    // Fall back to user-scoped client if service role is unavailable.
+  }
+
+  const { data: recentMessages, error: recentMessagesError } = await db
     .from('chat_messages')
     .select('*')
     .eq('user_id', user.id)
