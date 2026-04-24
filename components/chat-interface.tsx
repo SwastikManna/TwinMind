@@ -15,6 +15,7 @@ interface ChatInterfaceProps {
 
 interface SpeechRecognitionEvent extends Event {
   results: SpeechRecognitionResultList
+  resultIndex: number
 }
 
 interface SpeechRecognitionErrorEvent extends Event {
@@ -52,6 +53,7 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
   const inputRef = useRef<HTMLInputElement>(null)
   const speechRecognitionRef = useRef<SpeechRecognitionInstance | null>(null)
   const lastSpokenMessageIdRef = useRef<string | null>(null)
+  const shouldKeepListeningRef = useRef(false)
 
   const initialUIMessages: UIMessage[] = useMemo(() => {
     return initialMessages.map((msg, idx) => ({
@@ -79,9 +81,10 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
     }),
   }), [twinProfile])
 
-  const { messages, sendMessage, status, error } = useChat({
+  const { messages, sendMessage, setMessages, status, error } = useChat({
+    id: `twin-${twinProfile.id}`,
     transport,
-    initialMessages: initialUIMessages,
+    messages: initialUIMessages,
   })
 
   const isLoading = status === 'streaming' || status === 'submitted'
@@ -89,6 +92,12 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  useEffect(() => {
+    if (initialUIMessages.length > 0 && messages.length === 0) {
+      setMessages(initialUIMessages)
+    }
+  }, [initialUIMessages, messages.length, setMessages])
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -101,29 +110,51 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
     if (!SpeechRecognition) return
 
     const recognition = new SpeechRecognition()
-    recognition.continuous = false
+    recognition.continuous = true
     recognition.interimResults = true
     recognition.lang = 'en-US'
 
     recognition.onresult = (event) => {
-      const transcript = Array.from(event.results)
-        .map((result) => result[0]?.transcript || '')
-        .join(' ')
-      setInput(transcript)
+      let finalTranscript = ''
+      let interimTranscript = ''
+
+      for (let i = 0; i < event.results.length; i += 1) {
+        const transcript = event.results[i]?.[0]?.transcript || ''
+        if (event.results[i]?.isFinal) {
+          finalTranscript += `${transcript} `
+        } else {
+          interimTranscript += `${transcript} `
+        }
+      }
+
+      const nextInput = `${finalTranscript}${interimTranscript}`.trim()
+      setInput(nextInput)
     }
 
     recognition.onerror = (event) => {
-      setVoiceError(`Voice input error: ${event.error}`)
+      if (event.error !== 'no-speech' && event.error !== 'aborted') {
+        setVoiceError(`Voice input error: ${event.error}`)
+      }
       setIsListening(false)
+      shouldKeepListeningRef.current = false
     }
 
     recognition.onend = () => {
+      if (shouldKeepListeningRef.current) {
+        try {
+          recognition.start()
+          return
+        } catch {
+          // Some browsers throw if restarted too quickly; let user retry manually.
+        }
+      }
       setIsListening(false)
     }
 
     speechRecognitionRef.current = recognition
 
     return () => {
+      shouldKeepListeningRef.current = false
       recognition.stop()
     }
   }, [])
@@ -178,7 +209,7 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
     setSpeakingMessageId(null)
   }
 
-  function speakMessageText(text: string, messageId: string) {
+  function speakMessageText(text: string, messageId: string, source: 'auto' | 'manual' = 'auto') {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       setVoiceError('Voice output is not supported in this browser/device.')
       return
@@ -207,10 +238,13 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
       setIsSpeaking(false)
       setSpeakingMessageId((currentId) => (currentId === messageId ? null : currentId))
     }
-    utterance.onerror = () => {
+    utterance.onerror = (event: SpeechSynthesisErrorEvent) => {
       setIsSpeaking(false)
       setSpeakingMessageId((currentId) => (currentId === messageId ? null : currentId))
-      setVoiceError('Voice output failed on this browser/device.')
+      const ignoredErrors = new Set(['interrupted', 'canceled'])
+      if (!ignoredErrors.has(event.error) && source === 'manual') {
+        setVoiceError('Voice output failed on this browser/device.')
+      }
     }
 
     window.speechSynthesis.cancel()
@@ -232,7 +266,7 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
       return
     }
 
-    speakMessageText(text, latestAssistant.id)
+    speakMessageText(text, latestAssistant.id, 'auto')
     lastSpokenMessageIdRef.current = latestAssistant.id
   }, [messages, isVoiceEnabled, twinProfile.voice_preference])
 
@@ -263,13 +297,21 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
 
     setVoiceError(null)
     if (isListening) {
+      shouldKeepListeningRef.current = false
       recognition.stop()
       setIsListening(false)
       return
     }
 
-    recognition.start()
-    setIsListening(true)
+    try {
+      recognition.start()
+      shouldKeepListeningRef.current = true
+      setIsListening(true)
+    } catch {
+      setIsListening(false)
+      shouldKeepListeningRef.current = false
+      setVoiceError('Could not start voice input on this browser/device.')
+    }
   }
 
   function handleMessageSpeechToggle(message: UIMessage) {
@@ -283,7 +325,7 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
       return
     }
 
-    speakMessageText(messageText, message.id)
+    speakMessageText(messageText, message.id, 'manual')
   }
 
   const avatarExpression = isLoading
@@ -308,7 +350,14 @@ export function ChatInterface({ twinProfile, initialMessages }: ChatInterfacePro
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setIsVoiceEnabled(!isVoiceEnabled)}
+            onClick={() => {
+              const next = !isVoiceEnabled
+              setIsVoiceEnabled(next)
+              if (!next) {
+                stopSpeech()
+              }
+              setVoiceError(null)
+            }}
             className={`p-2 rounded-lg transition-colors ${
               isVoiceEnabled
                 ? 'bg-primary/10 text-primary'
