@@ -11,6 +11,7 @@ import {
   MessageSquare,
   Target,
   Lightbulb,
+  HeartPulse,
   Settings,
   LogOut,
   Menu,
@@ -26,6 +27,7 @@ interface DashboardNavProps {
 const navItems = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
   { href: '/dashboard/chat', label: 'Chat with Twin', icon: MessageSquare },
+  { href: '/dashboard/mood', label: 'Mood Tracker', icon: HeartPulse },
   { href: '/dashboard/goals', label: 'Goals', icon: Target },
   { href: '/dashboard/insights', label: 'Insights', icon: Lightbulb },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
@@ -140,9 +142,7 @@ export function DashboardNav({ user }: DashboardNavProps) {
               <p className="text-sm font-medium text-foreground truncate">
                 {user.user_metadata?.name || 'User'}
               </p>
-              <p className="text-xs text-muted-foreground truncate">
-                {user.email}
-              </p>
+              <p className="text-xs text-muted-foreground truncate">Private account</p>
             </div>
           </div>
           <button

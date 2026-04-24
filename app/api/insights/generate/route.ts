@@ -99,6 +99,35 @@ Rules:
       .single()
 
     if (error) {
+      if (isMissingTableError(error.message)) {
+        const now = new Date().toISOString()
+        const fallbackContent = `Insight (${object.insight_type}): ${object.summary}`
+
+        const { error: fallbackError } = await supabase.from('memory_logs').insert({
+          user_id: user.id,
+          content: fallbackContent,
+          log_type: 'reflection',
+          sentiment: 'neutral',
+          created_at: now,
+        })
+
+        if (fallbackError) {
+          return Response.json({ error: fallbackError.message }, { status: 500 })
+        }
+
+        return Response.json({
+          insight: {
+            id: `fallback-${Date.now()}`,
+            user_id: user.id,
+            summary: object.summary,
+            insight_type: object.insight_type,
+            data: { source: 'memory_logs_fallback', created_at: now },
+            created_at: now,
+          },
+          source: 'fallback',
+        })
+      }
+
       logTelemetryEvent({
         name: 'insight.generate.insert_failed',
         level: 'error',

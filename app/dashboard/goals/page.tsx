@@ -23,7 +23,7 @@ export default async function GoalsPage() {
   }
 
   // Fetch recent memory logs related to goals
-  const { data: memoryLogs } = await supabase
+  const { data: memoryLogs, error: memoryLogsError } = await supabase
     .from('memory_logs')
     .select('*')
     .eq('user_id', user.id)
@@ -31,12 +31,25 @@ export default async function GoalsPage() {
     .order('created_at', { ascending: false })
     .limit(10) as { data: MemoryLog[] | null }
 
+  const safeMemoryLogs =
+    memoryLogsError && isMissingTableError(memoryLogsError.message)
+      ? []
+      : memoryLogs || []
+
   return (
     <div className="max-w-4xl mx-auto pt-16 lg:pt-0">
       <GoalsManager 
         twinProfile={twinProfile} 
-        memoryLogs={memoryLogs || []}
+        memoryLogs={safeMemoryLogs}
       />
     </div>
+  )
+}
+
+function isMissingTableError(message: string) {
+  const normalized = message.toLowerCase()
+  return (
+    normalized.includes('could not find the table') ||
+    (normalized.includes('relation') && normalized.includes('does not exist'))
   )
 }

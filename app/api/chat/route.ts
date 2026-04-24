@@ -10,6 +10,8 @@ import { getLanguageModel, getObjectGenerationProviderOptions } from '@/lib/ai'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { logTelemetryEvent } from '@/lib/telemetry'
+import { inferMoodScoresFromText } from '@/lib/mood'
+import { saveMoodEntry } from '@/lib/mood-storage'
 import { z } from 'zod'
 
 export const maxDuration = 60
@@ -110,6 +112,12 @@ export async function POST(req: Request) {
               userContent,
               assistantContent,
             })
+
+            await persistChatMoodSnapshot({
+              supabase,
+              userId: user.id,
+              userText: userContent,
+            })
           }
         }
       } catch (error) {
@@ -152,6 +160,12 @@ interface PersistChatTurnParams {
   userEmail: string | null
   userContent: string
   assistantContent: string
+}
+
+interface PersistChatMoodSnapshotParams {
+  supabase: Awaited<ReturnType<typeof createClient>>
+  userId: string
+  userText: string
 }
 
 const ExtractedSignalsSchema = z.object({
@@ -388,6 +402,34 @@ async function persistChatTurn({
       level: 'error',
       userId,
       metadata: { error: fallbackError.message },
+    })
+  }
+}
+
+async function persistChatMoodSnapshot({
+  supabase,
+  userId,
+  userText,
+}: PersistChatMoodSnapshotParams) {
+  const text = userText.trim()
+  if (text.length < 3) return
+
+  const { happiness, stress } = inferMoodScoresFromText(text)
+
+  try {
+    await saveMoodEntry(supabase, {
+      user_id: userId,
+      source: 'chat',
+      reflection: text.slice(0, 240),
+      happiness,
+      stress,
+    })
+  } catch (error) {
+    logTelemetryEvent({
+      name: 'chat.mood_snapshot_failed',
+      level: 'warn',
+      userId,
+      metadata: { error: error instanceof Error ? error.message : 'unknown' },
     })
   }
 }

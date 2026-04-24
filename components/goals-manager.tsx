@@ -12,6 +12,13 @@ interface GoalsManagerProps {
   memoryLogs: MemoryLog[]
 }
 
+interface GoalCoachPlan {
+  focus_goal: string
+  weekly_tasks: Array<{ day: string; task: string; why: string }>
+  risk: string
+  win_condition: string
+}
+
 export function GoalsManager({ twinProfile, memoryLogs }: GoalsManagerProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -21,6 +28,26 @@ export function GoalsManager({ twinProfile, memoryLogs }: GoalsManagerProps) {
   const [completedGoals, setCompletedGoals] = useState<string[]>([])
   const [goalCheckin, setGoalCheckin] = useState<{ summary: string; suggested_actions: string[] } | null>(null)
   const [goalError, setGoalError] = useState<string | null>(null)
+  const [isGeneratingCoachPlan, setIsGeneratingCoachPlan] = useState(false)
+  const [goalCoachPlan, setGoalCoachPlan] = useState<GoalCoachPlan | null>(() => {
+    const model = twinProfile.ai_personality_model as unknown as Record<string, unknown>
+    const raw = model?.goal_coach_plan
+    if (!raw || typeof raw !== 'object') return null
+    const value = raw as Record<string, unknown>
+    if (!Array.isArray(value.weekly_tasks)) return null
+    return {
+      focus_goal: String(value.focus_goal || ''),
+      weekly_tasks: value.weekly_tasks
+        .filter((item): item is Record<string, unknown> => typeof item === 'object' && item != null)
+        .map((item) => ({
+          day: String(item.day || ''),
+          task: String(item.task || ''),
+          why: String(item.why || ''),
+        })),
+      risk: String(value.risk || ''),
+      win_condition: String(value.win_condition || ''),
+    }
+  })
 
   async function handleAddGoal() {
     if (!newGoal.trim()) return
@@ -117,6 +144,24 @@ export function GoalsManager({ twinProfile, memoryLogs }: GoalsManagerProps) {
     }
   }
 
+  async function handleGenerateGoalCoachPlan() {
+    setIsGeneratingCoachPlan(true)
+    setGoalError(null)
+    try {
+      const response = await fetch('/api/goals/plan', { method: 'POST' })
+      const payload = (await response.json()) as { error?: string; plan?: GoalCoachPlan }
+      if (!response.ok || !payload.plan) {
+        throw new Error(payload.error || 'Could not generate goal coach plan')
+      }
+      setGoalCoachPlan(payload.plan)
+      startTransition(() => router.refresh())
+    } catch (error) {
+      setGoalError(error instanceof Error ? error.message : 'Could not generate goal coach plan')
+    } finally {
+      setIsGeneratingCoachPlan(false)
+    }
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -130,6 +175,14 @@ export function GoalsManager({ twinProfile, memoryLogs }: GoalsManagerProps) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleGenerateGoalCoachPlan}
+            disabled={isGeneratingCoachPlan || isPending || twinProfile.goals.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+          >
+            {isGeneratingCoachPlan ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Target className="w-5 h-5" />}
+            Goal Coach
+          </button>
           <button
             onClick={handleGenerateGoalCheckin}
             disabled={isGeneratingCheckin || isPending || twinProfile.goals.length === 0}
@@ -171,6 +224,27 @@ export function GoalsManager({ twinProfile, memoryLogs }: GoalsManagerProps) {
               ))}
             </ul>
           )}
+        </div>
+      )}
+
+      {goalCoachPlan && (
+        <div className="bg-card rounded-2xl border border-border p-6">
+          <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+            <Target className="w-5 h-5 text-primary" />
+            Goal Coach Plan
+          </h3>
+          <p className="text-sm text-muted-foreground mb-1">Focus this week</p>
+          <p className="text-foreground mb-4">{goalCoachPlan.focus_goal}</p>
+          <div className="space-y-2 mb-4">
+            {goalCoachPlan.weekly_tasks.map((task, idx) => (
+              <div key={`${task.day}-${idx}`} className="rounded-xl border border-border px-3 py-2">
+                <p className="text-sm font-medium text-foreground">{task.day}: {task.task}</p>
+                <p className="text-xs text-muted-foreground mt-1">{task.why}</p>
+              </div>
+            ))}
+          </div>
+          <p className="text-sm text-muted-foreground">Risk: <span className="text-foreground">{goalCoachPlan.risk}</span></p>
+          <p className="text-sm text-muted-foreground mt-1">Win condition: <span className="text-foreground">{goalCoachPlan.win_condition}</span></p>
         </div>
       )}
 

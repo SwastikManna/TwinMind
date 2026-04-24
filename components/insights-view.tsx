@@ -26,7 +26,16 @@ export function InsightsView({ twinProfile, insights, memoryLogs }: InsightsView
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false)
   const [generationError, setGenerationError] = useState<string | null>(null)
+  const [weeklyReport, setWeeklyReport] = useState<{
+    avgHappiness: number
+    avgStress: number
+    happinessDelta: number
+    stressDelta: number
+    stressSpike: { date: string; stress: number; baseline: number; severity: number } | null
+    recommendation: string
+  } | null>(null)
 
   async function generateInsight() {
     setIsGenerating(true)
@@ -44,6 +53,24 @@ export function InsightsView({ twinProfile, insights, memoryLogs }: InsightsView
       setGenerationError(error instanceof Error ? error.message : 'Insight generation failed')
     } finally {
       setIsGenerating(false)
+    }
+  }
+
+  async function generateWeeklyReport() {
+    setIsGeneratingReport(true)
+    setGenerationError(null)
+
+    try {
+      const response = await fetch('/api/insights/report')
+      const payload = (await response.json()) as { error?: string; report?: typeof weeklyReport }
+      if (!response.ok || !payload.report) {
+        throw new Error(payload.error || 'Weekly report generation failed')
+      }
+      setWeeklyReport(payload.report as NonNullable<typeof weeklyReport>)
+    } catch (error) {
+      setGenerationError(error instanceof Error ? error.message : 'Weekly report generation failed')
+    } finally {
+      setIsGeneratingReport(false)
     }
   }
 
@@ -71,18 +98,32 @@ export function InsightsView({ twinProfile, insights, memoryLogs }: InsightsView
             Personalized patterns and recommendations from your twin
           </p>
         </div>
-        <button
-          onClick={generateInsight}
-          disabled={isGenerating || isPending}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
-        >
-          {isGenerating ? (
-            <RefreshCw className="w-5 h-5 animate-spin" />
-          ) : (
-            <Sparkles className="w-5 h-5" />
-          )}
-          Generate Insight
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={generateWeeklyReport}
+            disabled={isGeneratingReport || isPending}
+            className="flex items-center gap-2 px-4 py-2 bg-accent text-accent-foreground rounded-xl font-medium hover:bg-accent/90 disabled:opacity-50 transition-colors"
+          >
+            {isGeneratingReport ? (
+              <RefreshCw className="w-5 h-5 animate-spin" />
+            ) : (
+              <Calendar className="w-5 h-5" />
+            )}
+            Weekly Report
+          </button>
+          <button
+            onClick={generateInsight}
+            disabled={isGenerating || isPending}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+          >
+            {isGenerating ? (
+              <RefreshCw className="w-5 h-5 animate-spin" />
+            ) : (
+              <Sparkles className="w-5 h-5" />
+            )}
+            Generate Insight
+          </button>
+        </div>
       </div>
 
       {/* Stats Overview */}
@@ -178,41 +219,33 @@ export function InsightsView({ twinProfile, insights, memoryLogs }: InsightsView
         )}
       </div>
 
-      {/* Personality Summary */}
-      <div className="bg-card rounded-2xl border border-border p-6">
-        <h2 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-          <Brain className="w-5 h-5 text-primary" />
-          Your Profile Summary
-        </h2>
-        <div className="grid md:grid-cols-2 gap-6">
-          <div>
-            <p className="text-sm text-muted-foreground mb-2">Personality Traits</p>
-            <div className="flex flex-wrap gap-2">
-              {twinProfile.personality_traits.map((trait, i) => (
-                <span
-                  key={i}
-                  className="px-3 py-1 rounded-full bg-primary/10 text-primary text-sm"
-                >
-                  {trait}
-                </span>
-              ))}
+      {weeklyReport && (
+        <div className="bg-card rounded-2xl border border-border p-6">
+          <h2 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-accent" />
+            Weekly Mood Report
+          </h2>
+          <div className="grid md:grid-cols-2 gap-4 mb-4">
+            <div className="rounded-xl border border-border p-4">
+              <p className="text-sm text-muted-foreground">Avg Happiness</p>
+              <p className="text-2xl font-semibold text-foreground">{weeklyReport.avgHappiness}</p>
+              <p className="text-xs text-muted-foreground">Delta vs previous week: {weeklyReport.happinessDelta >= 0 ? '+' : ''}{weeklyReport.happinessDelta}</p>
+            </div>
+            <div className="rounded-xl border border-border p-4">
+              <p className="text-sm text-muted-foreground">Avg Stress</p>
+              <p className="text-2xl font-semibold text-foreground">{weeklyReport.avgStress}</p>
+              <p className="text-xs text-muted-foreground">Delta vs previous week: {weeklyReport.stressDelta >= 0 ? '+' : ''}{weeklyReport.stressDelta}</p>
             </div>
           </div>
-          <div>
-            <p className="text-sm text-muted-foreground mb-2">Interests</p>
-            <div className="flex flex-wrap gap-2">
-              {twinProfile.interests.map((interest, i) => (
-                <span
-                  key={i}
-                  className="px-3 py-1 rounded-full bg-accent/10 text-accent text-sm"
-                >
-                  {interest}
-                </span>
-              ))}
+          {weeklyReport.stressSpike && (
+            <div className="rounded-xl bg-destructive/10 text-destructive px-4 py-3 text-sm mb-3">
+              Stress spike detected on {weeklyReport.stressSpike.date} (stress {weeklyReport.stressSpike.stress}, baseline {weeklyReport.stressSpike.baseline}).
             </div>
-          </div>
+          )}
+          <p className="text-sm text-foreground">{weeklyReport.recommendation}</p>
         </div>
-      </div>
+      )}
+
     </div>
   )
 }

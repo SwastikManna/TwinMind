@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import { MessageSquare, Target, Lightbulb, TrendingUp, Calendar, ArrowRight } from 'lucide-react'
+import { MessageSquare, Target, Lightbulb, TrendingUp, Calendar, ArrowRight, HeartPulse } from 'lucide-react'
 import { AvatarPreview } from '@/components/avatar-preview'
+import { DailyCheckinCard } from '@/components/daily-checkin-card'
 import type { TwinProfile, Insight, MemoryLog } from '@/lib/types'
 
 export default async function DashboardPage() {
@@ -29,12 +30,20 @@ export default async function DashboardPage() {
     .limit(3) as { data: Insight[] | null }
 
   // Fetch recent memory logs
-  const { data: memoryLogs } = await supabase
+  const { data: memoryLogs, error: memoryLogsError } = await supabase
     .from('memory_logs')
     .select('*')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
-    .limit(5) as { data: MemoryLog[] | null }
+    .limit(60) as { data: MemoryLog[] | null }
+
+  // Fetch recent chat messages
+  const { data: chatMessages, error: chatMessagesError } = await supabase
+    .from('chat_messages')
+    .select('id, role, content, created_at')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(100) as { data: Array<{ id: string; role: 'user' | 'assistant'; content: string; created_at: string }> | null }
 
   // If no twin profile exists, redirect to onboarding
   if (!twinProfile) {
@@ -43,6 +52,65 @@ export default async function DashboardPage() {
 
   const greeting = getGreeting()
   const userName = user.user_metadata?.name || twinProfile.name || 'there'
+  const allLogs = memoryLogsError && isMissingTableError(memoryLogsError.message) ? [] : memoryLogs || []
+  const safeChatMessages =
+    chatMessagesError && isMissingTableError(chatMessagesError.message) ? [] : chatMessages || []
+
+  const modelData =
+    twinProfile.ai_personality_model && typeof twinProfile.ai_personality_model === 'object'
+      ? (twinProfile.ai_personality_model as Record<string, unknown>)
+      : {}
+  const appearanceData =
+    modelData.avatar_appearance && typeof modelData.avatar_appearance === 'object'
+      ? (modelData.avatar_appearance as Record<string, unknown>)
+      : {}
+  const twinHeadColor =
+    typeof appearanceData.head_color === 'string' && /^#[0-9a-fA-F]{6}$/.test(appearanceData.head_color)
+      ? appearanceData.head_color
+      : '#0d9488'
+  const twinBodyColor =
+    typeof appearanceData.body_color === 'string' && /^#[0-9a-fA-F]{6}$/.test(appearanceData.body_color)
+      ? appearanceData.body_color
+      : '#0f766e'
+  const fallbackChatHistory = Array.isArray(modelData.chat_history)
+    ? (modelData.chat_history as Array<Record<string, unknown>>)
+    : []
+  const todaysChats = buildTodayChatActivity({
+    chatMessages: safeChatMessages,
+    fallbackChatHistory,
+    twinName: twinProfile.name,
+  })
+
+  const hasCheckedInTodayFromLogs = allLogs.some((log) => {
+    if (log.log_type !== 'mood') return false
+    const text = log.content.toLowerCase()
+    if (!text.includes('daily check-in mood:')) return false
+    const created = new Date(log.created_at)
+    const now = new Date()
+    return (
+      created.getFullYear() === now.getFullYear() &&
+      created.getMonth() === now.getMonth() &&
+      created.getDate() === now.getDate()
+    )
+  })
+
+  const hasCheckedInTodayFromFallback = Array.isArray(modelData.mood_tracker_entries)
+    ? (modelData.mood_tracker_entries as Array<Record<string, unknown>>).some((entry) => {
+        const source = String(entry.source || '')
+        if (source !== 'checkin') return false
+        const createdAt = String(entry.created_at || '')
+        if (!createdAt) return false
+        const created = new Date(createdAt)
+        const now = new Date()
+        return (
+          created.getFullYear() === now.getFullYear() &&
+          created.getMonth() === now.getMonth() &&
+          created.getDate() === now.getDate()
+        )
+      })
+    : false
+
+  const hasCheckedInToday = hasCheckedInTodayFromLogs || hasCheckedInTodayFromFallback
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 pt-16 lg:pt-0">
@@ -58,13 +126,13 @@ export default async function DashboardPage() {
             </p>
           </div>
           <div className="w-32 h-32 lg:w-40 lg:h-40 flex-shrink-0">
-            <AvatarPreview expression="happy" size="md" />
+            <AvatarPreview expression="happy" size="md" headColor={twinHeadColor} bodyColor={twinBodyColor} />
           </div>
         </div>
       </div>
 
       {/* Quick Actions */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <QuickActionCard
           href="/dashboard/chat"
           icon={<MessageSquare className="w-5 h-5" />}
@@ -86,7 +154,16 @@ export default async function DashboardPage() {
           description="See patterns and recommendations"
           color="chart-2"
         />
+        <QuickActionCard
+          href="/dashboard/mood"
+          icon={<HeartPulse className="w-5 h-5" />}
+          title="Mood Tracker"
+          description="Daily happiness and stress trends"
+          color="chart-4"
+        />
       </div>
+
+      {!hasCheckedInToday && <DailyCheckinCard hasCheckedInToday={hasCheckedInToday} />}
 
       {/* Stats and Activity */}
       <div className="grid lg:grid-cols-2 gap-6">
@@ -129,30 +206,38 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* Recent Activity */}
+        {/* Today's Chats */}
         <div className="bg-card rounded-2xl border border-border p-6">
           <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
             <Calendar className="w-5 h-5 text-primary" />
-            Recent Activity
+            Today&apos;s Chats
           </h2>
-          {memoryLogs && memoryLogs.length > 0 ? (
-            <ul className="space-y-3">
-              {memoryLogs.map((log) => (
-                <li key={log.id} className="flex items-start gap-3 pb-3 border-b border-border last:border-0 last:pb-0">
-                  <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${getLogTypeColor(log.log_type)}`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-foreground line-clamp-2">{log.content}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {formatRelativeTime(log.created_at)}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
+          {todaysChats.length > 0 ? (
+            <div className="max-h-[340px] overflow-y-auto pr-1">
+              <ul className="space-y-3">
+                {todaysChats.map((item) => (
+                  <li key={`${item.id}-${item.created_at}`} className="pb-3 border-b border-border last:border-0 last:pb-0">
+                    <Link
+                      href={`/dashboard/chat?messageId=${encodeURIComponent(item.id)}&messageAt=${encodeURIComponent(item.created_at)}&messageRole=${encodeURIComponent(item.role)}&messageText=${encodeURIComponent(item.preview.slice(0, 60))}`}
+                      className="flex items-start gap-3 rounded-xl p-2 hover:bg-muted/40 transition-colors"
+                    >
+                      <div className="w-2 h-2 rounded-full mt-2 flex-shrink-0 bg-chart-4" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-foreground line-clamp-2">
+                          {item.role === 'assistant' ? `${twinProfile.name}: ` : 'You: '}
+                          {item.preview}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">{formatRelativeTime(item.created_at)}</p>
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ) : (
             <div className="text-center py-8">
               <p className="text-muted-foreground text-sm">
-                No activity yet. Start chatting with your twin!
+                No chats yet today.
               </p>
               <Link
                 href="/dashboard/chat"
@@ -197,6 +282,7 @@ export default async function DashboardPage() {
           </div>
         </div>
       )}
+
     </div>
   )
 }
@@ -237,19 +323,56 @@ function getGreeting() {
   return 'Good evening'
 }
 
-function getLogTypeColor(type: string) {
-  switch (type) {
-    case 'daily':
-      return 'bg-primary'
-    case 'reflection':
-      return 'bg-accent'
-    case 'decision':
-      return 'bg-chart-3'
-    case 'mood':
-      return 'bg-chart-4'
-    default:
-      return 'bg-muted-foreground'
+function buildTodayChatActivity({
+  chatMessages,
+  fallbackChatHistory,
+  twinName,
+}: {
+  chatMessages: Array<{ id: string; role: 'user' | 'assistant'; content: string; created_at: string }>
+  fallbackChatHistory: Array<Record<string, unknown>>
+  twinName: string
+}) {
+  const now = new Date()
+  const items: Array<{ id: string; role: 'user' | 'assistant'; preview: string; created_at: string }> = []
+
+  for (const msg of chatMessages) {
+    if (!isSameCalendarDay(msg.created_at, now)) continue
+    items.push({
+      id: msg.id,
+      role: msg.role,
+      preview: trimText(msg.content, 140),
+      created_at: msg.created_at,
+    })
   }
+
+  for (let idx = 0; idx < fallbackChatHistory.length; idx += 1) {
+    const entry = fallbackChatHistory[idx]
+    const content = String(entry.content || '').trim()
+    const createdAt = String(entry.created_at || '')
+    if (!content || !createdAt) continue
+    if (!isSameCalendarDay(createdAt, now)) continue
+    const role = entry.role === 'assistant' ? 'assistant' : 'user'
+    items.push({
+      id: String(entry.id || `fallback-${createdAt}-${idx}`),
+      role,
+      preview: trimText(content, 140),
+      created_at: createdAt,
+    })
+  }
+
+  const deduped = new Map<string, { id: string; role: 'user' | 'assistant'; preview: string; created_at: string }>()
+  for (const item of items) {
+    const key = `${item.created_at}|${item.role}|${item.preview}`
+    if (!deduped.has(key)) deduped.set(key, item)
+  }
+
+  return Array.from(deduped.values()).sort((a, b) => b.created_at.localeCompare(a.created_at))
+}
+
+function trimText(text: string, max = 140) {
+  const clean = text.replace(/\s+/g, ' ').trim()
+  if (clean.length <= max) return clean
+  return `${clean.slice(0, max - 1)}...`
 }
 
 function getInsightTypeStyle(type: string) {
@@ -281,3 +404,21 @@ function formatRelativeTime(dateString: string) {
   if (days < 7) return `${days}d ago`
   return date.toLocaleDateString()
 }
+
+function isSameCalendarDay(dateString: string, today: Date) {
+  const d = new Date(dateString)
+  return (
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate()
+  )
+}
+
+function isMissingTableError(message: string) {
+  const normalized = message.toLowerCase()
+  return (
+    normalized.includes('could not find the table') ||
+    (normalized.includes('relation') && normalized.includes('does not exist'))
+  )
+}
+
